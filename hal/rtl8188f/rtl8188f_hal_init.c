@@ -3179,6 +3179,7 @@ void init_hal_spec_8188f(_adapter *adapter)
 	hal_spec->macid_num = 16;
 	hal_spec->sec_cam_ent_num = 16;
 	hal_spec->sec_cap = 0;
+	hal_spec->wow_cap = WOW_CAP_TKIP_OL;
 	hal_spec->macid_cap = MACID_DROP_INDIRECT;
 	hal_spec->macid_txrpt = 0x8100;
 	hal_spec->macid_txrpt_pgsz = 16;

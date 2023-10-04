@@ -450,7 +450,7 @@ struct registry_priv {
 #ifdef CONFIG_DFS_MASTER
 	u8 dfs_region_domain;
 #endif
-
+	u8 amsdu_mode;
 #ifdef CONFIG_MCC_MODE
 	u8 en_mcc;
 	u32 rtw_mcc_single_tx_cri;
