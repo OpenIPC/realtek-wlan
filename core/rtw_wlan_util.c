@@ -2209,7 +2209,7 @@ int check_ielen(u8 *start, uint len)
 	return _TRUE;
 }
 
-int validate_beacon_len(u8 *pframe, u32 len)
+int validate_bcn_and_probe_rsp_len(u8 *pframe, u32 len)
 {
 	u8 ie_offset = _BEACON_IE_OFFSET_ + sizeof(struct rtw_ieee80211_hdr_3addr);
 
@@ -2604,19 +2604,27 @@ exit:
 	return ret;
 }
 
+static void rtw_csa_update_cur_network(_adapter *adapter, u8 *pframe, u32 packet_len)
+{
+	WLAN_BSSID_EX *cur_network = &(adapter->mlmepriv.cur_network.network);
+
+	cur_network->IELength = packet_len - sizeof(struct rtw_ieee80211_hdr_3addr);
+	_rtw_memcpy(cur_network->IEs, (pframe + sizeof(struct rtw_ieee80211_hdr_3addr)),
+				cur_network->IELength);
+	RTW_INFO(FUNC_ADPT_FMT"\n", FUNC_ADPT_ARG(adapter));
+}
+
 int rtw_check_bcn_info(ADAPTER *Adapter, u8 *pframe, u32 packet_len)
 {
 	u8 *pbssid = GetAddr3Ptr(pframe);
 	struct mlme_priv *pmlmepriv = &Adapter->mlmepriv;
-	struct wlan_network *cur_network = &(Adapter->mlmepriv.cur_network);
 	struct beacon_keys *cur_beacon = &pmlmepriv->cur_beacon_keys;
 	struct beacon_keys recv_beacon;
 	int ret = 0;
 	u8 ifbmp_m = rtw_mi_get_ap_mesh_ifbmp(Adapter);
 	u8 ifbmp_s = rtw_mi_get_ld_sta_ifbmp(Adapter);
 	struct dvobj_priv *dvobj = adapter_to_dvobj(Adapter);
-	_adapter *pri_adapter = dvobj_get_primary_adapter(dvobj);
-	struct mlme_ext_priv *pmlmeext = &pri_adapter->mlmeextpriv;
+	struct mlme_ext_priv *pmlmeext = &Adapter->mlmeextpriv;
 
 	if (is_client_associated_to_ap(Adapter) == _FALSE)
 		goto exit_success;
@@ -2635,66 +2643,90 @@ int rtw_check_bcn_info(ADAPTER *Adapter, u8 *pframe, u32 packet_len)
 	}
 
 	if (check_fwstate(pmlmepriv, WIFI_CSA_UPDATE_BEACON)) {
-		u8 u_ch, u_offset, u_bw;
-		struct sta_info	*psta = NULL;
-		_rtw_memcpy(cur_beacon, &recv_beacon, sizeof(recv_beacon));
-		clr_fwstate(pmlmepriv, WIFI_CSA_UPDATE_BEACON);
-		rtw_mi_get_ch_setting_union(Adapter, &u_ch, &u_bw, &u_offset);
-		
-		/* RTW_INFO("u_ch=%d, u_bw=%d, u_offset=%d \n", u_ch, u_bw, u_offset);
-		RTW_INFO("recv_beacon.ch=%d, recv_beacon.bw=%d, recv_beacon.offset=%d \n", recv_beacon.ch, recv_beacon.bw, recv_beacon.offset); */
-		/* rtw_dump_bcn_keys(RTW_DBGDUMP, &recv_beacon); */
-		
-		/* RTW_INFO("_cancel_timer_async csa_timer\n"); */
-		_cancel_timer_async(&pmlmeext->csa_timer);
-		
-		/* beacon bw/offset is different from CSA IE */
-		if((recv_beacon.bw > u_bw) || 
-			((recv_beacon.offset != HAL_PRIME_CHNL_OFFSET_DONT_CARE) && ((u_offset != HAL_PRIME_CHNL_OFFSET_DONT_CARE))
-			&& (recv_beacon.offset != u_offset))) {
-			
-			/*  update ch, bw, offset for all asoc STA ifaces */
-			if (ifbmp_s) {
-				_adapter *iface;
-				int i;
+		u8 c_ch, c_bw, c_offset;
+		bool bw_offset_changed = _FALSE;
 
-				for (i = 0; i < dvobj->iface_nums; i++) {
-					iface = dvobj->padapters[i];
-					if (!iface || !(ifbmp_s & BIT(iface->iface_id)))
-						continue;
-					
-					iface->mlmeextpriv.cur_channel = recv_beacon.ch;
-					iface->mlmeextpriv.cur_bwmode = recv_beacon.bw;
-					iface->mlmeextpriv.cur_ch_offset = recv_beacon.offset;
-					iface->mlmepriv.cur_network.network.Configuration.DSConfig = recv_beacon.ch;
-				}
-			}
-			
-#ifdef CONFIG_AP_MODE
+		c_ch = pmlmeext->cur_channel;
+		c_bw = pmlmeext->cur_bwmode;
+		c_offset = pmlmeext->cur_ch_offset;
+
+		/*
+		* Case 1 : channel is different
+		* 	AP doesn't udpate its beacon.
+		* Case 2 : channel is same
+		*	AP may not update its beacon yet, so we wait 5 beacon.
+		* Case 3 : we already wait 5 beacon
+		*	We assume that AP update its beacon.
+		*/
+		if (c_ch != recv_beacon.ch) {
+			goto exit_success;
+		} else if (c_ch == recv_beacon.ch &&
+				pmlmepriv->bcn_cnts_after_csa < 5) {
+			pmlmepriv->bcn_cnts_after_csa += 1;
+			goto exit_success;
+		} else {
+			pmlmepriv->bcn_cnts_after_csa = 0;
+		}
+
+		rtw_csa_update_cur_network(Adapter, pframe, packet_len);
+		_rtw_memcpy(cur_beacon, &recv_beacon, sizeof(recv_beacon));
+		RTW_INFO("csa : recv_beacon ch/bw/offset = %u,%u,%u\n",
+			recv_beacon.ch, recv_beacon.bw, recv_beacon.offset);
+		RTW_INFO("csa : before update our bw/offset, current bw/offset = %u,%u\n",
+			c_bw, c_offset);
+		/* rtw_dump_bcn_keys(RTW_DBGDUMP, &recv_beacon); */
+
+		clr_fwstate(pmlmepriv, WIFI_CSA_UPDATE_BEACON);
+		_cancel_timer_async(&pmlmeext->csa_timer);
+
+		/* Current bw/offset is different from AP */
+		if (c_bw != recv_beacon.bw || c_offset != recv_beacon.offset) {
+			RTW_INFO("csa : need to sync bw/offset with AP\n");
+			bw_offset_changed = _TRUE;
+			pmlmeext->cur_bwmode = recv_beacon.bw;
+			pmlmeext->cur_ch_offset = recv_beacon.offset;
+		}
+
+		if (rtw_adjust_chbw(Adapter, pmlmeext->cur_channel,
+				&pmlmeext->cur_bwmode, &pmlmeext->cur_ch_offset)) {
+			RTW_INFO("csa : limit bandwith by sw capability\n");
+			bw_offset_changed = _TRUE;
+		}
+
+		if (bw_offset_changed) {
+			c_bw = pmlmeext->cur_bwmode;
+			c_offset = pmlmeext->cur_ch_offset;
+
+			#ifdef CONFIG_AP_MODE
 			if (ifbmp_m) {
 				rtw_change_bss_chbw_cmd(dvobj_get_primary_adapter(dvobj), 0
 					, ifbmp_m, 0, recv_beacon.ch, REQ_BW_ORI, REQ_OFFSET_NONE);
 			} else
-#endif
+			#endif
 			{
 				#ifdef CONFIG_DFS_MASTER
 				rtw_dfs_rd_en_decision(dvobj_get_primary_adapter(dvobj), MLME_OPCH_SWITCH, 0);
 				#endif
-				rtw_set_chbw_cmd(Adapter, recv_beacon.ch, recv_beacon.bw, recv_beacon.offset, 0);
+				rtw_set_chbw_cmd(Adapter, c_ch, c_bw, c_offset, 0);
 			}
-			rtw_mi_get_ch_setting_union(Adapter, &u_ch, &u_bw, &u_offset);
-		
-			/* RTW_INFO("u_ch=%d, u_bw=%d, u_offset=%d \n", u_ch, u_bw, u_offset); */
+			RTW_INFO("csa : after update bw/offset, new bw/offset = %u,%u\n", c_bw, c_offset);
 		} else {
-			RTW_INFO("u_ch=%d, u_bw=%d, u_offset=%d, recv_beacon.ch=%d, recv_beacon.bw=%d, recv_beacon.offset=%d\n"
-			, u_ch, u_bw, u_offset, recv_beacon.ch, recv_beacon.bw, recv_beacon.offset);
+			RTW_INFO("csa : our bw/offset is same as AP\n");
 		}
-		
+
+#if defined(CONFIG_IOCTL_CFG80211) && (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 5, 0))
+		{
+			u8 ht_option = 0;
+#ifdef CONFIG_80211N_HT
+			ht_option = pmlmepriv->htpriv.ht_option;
+#endif
+			rtw_cfg80211_ch_switch_notify(Adapter, c_ch, c_bw, c_offset, ht_option, 0);
+		}
+#endif /* defined(CONFIG_IOCTL_CFG80211) && (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 5, 0)) */
 		rtw_iqk_cmd(Adapter, 0);
-		psta = rtw_get_stainfo(&Adapter->stapriv, get_bssid(&Adapter->mlmepriv));
-		if (psta)
-			rtw_dm_ra_mask_wk_cmd(Adapter, (u8 *)psta);
-		
+		rtw_csa_sta_update_cap_cmd(Adapter);
+
+		RTW_INFO("csa : update beacon done, WIFI_CSA_UPDATE_BEACON is clear\n");
 	}
 
 #ifdef CONFIG_BCN_CNT_CONFIRM_HDL
@@ -2788,7 +2820,7 @@ void update_beacon_info(_adapter *padapter, u8 *pframe, uint pkt_len, struct sta
 			break;
 
 #ifdef CONFIG_TDLS
-		case _EXT_CAP_IE_:
+		case WLAN_EID_EXT_CAP:
 			if (check_ap_tdls_prohibited(pIE->data, pIE->Length) == _TRUE)
 				ptdlsinfo->ap_prohibited = _TRUE;
 			if (check_ap_tdls_ch_switching_prohibited(pIE->data, pIE->Length) == _TRUE)
@@ -2807,21 +2839,22 @@ void update_beacon_info(_adapter *padapter, u8 *pframe, uint pkt_len, struct sta
 void process_csa_ie(_adapter *padapter, u8 *ies, uint ies_len)
 {
 	struct rf_ctl_t *rfctl = adapter_to_rfctl(padapter);
-		struct mlme_ext_priv *pmlmeext = &padapter->mlmeextpriv;
+	struct mlme_ext_priv *pmlmeext = &padapter->mlmeextpriv;
 	struct mlme_ext_info *pmlmeinfo = &(pmlmeext->mlmext_info);
+	struct mlme_priv *pmlmepriv = &padapter->mlmepriv;
 	unsigned int i, j, countdown;
-	PNDIS_802_11_VARIABLE_IEs	pIE, sub_pie;
+	PNDIS_802_11_VARIABLE_IEs pIE, sub_pie;
 	u8 ch = 0, csa_ch_offset = 0, csa_ch_width = 0, csa_ch_freq_seg0 = 0, csa_ch_freq_seg1 = 0, csa_switch_cnt = 0;
 
-	/* TODO: compare with scheduling CSA */
-	if (rfctl->csa_ch)
+	/* compare with scheduling CSA to block incoming CSA IE */
+	if (rfctl->csa_ch || check_fwstate(pmlmepriv, WIFI_CSA_UPDATE_BEACON))
 		return;
 
 	for (i = 0; i + 1 < ies_len;) {
 		pIE = (PNDIS_802_11_VARIABLE_IEs)(ies + i);
 
 		switch (pIE->ElementID) {
-		case _CH_SWTICH_ANNOUNCE_:
+		case WLAN_EID_CHANNEL_SWITCH:
 			ch = *(pIE->data + 1);
 			csa_switch_cnt = *(pIE->data + 2);
 			break;
@@ -2847,8 +2880,51 @@ void process_csa_ie(_adapter *padapter, u8 *ies, uint ies_len)
 				}
 				j += (sub_pie->Length + 2);
 			}
-			
 			break;
+#ifdef CONFIG_ECSA
+		case WLAN_EID_ECSA:
+			rfctl->ecsa_mode = *(pIE->data + 0);
+			rfctl->ecsa_op_class = *(pIE->data + 1);
+			ch = *(pIE->data + 2);
+			csa_switch_cnt = *(pIE->data + 3);
+
+			rtw_get_bw_offset_by_op_class_ch(rfctl->ecsa_op_class,
+							 ch, &csa_ch_width,
+							 &csa_ch_offset);
+			/* change to ieee offset */
+			switch (csa_ch_offset) {
+			case HAL_PRIME_CHNL_OFFSET_LOWER:
+				csa_ch_offset = IEEE80211_HT_IE_CHA_SEC_BELOW;
+				break;
+			case HAL_PRIME_CHNL_OFFSET_UPPER:
+				csa_ch_offset = IEEE80211_HT_IE_CHA_SEC_ABOVE;
+				break;
+			default:
+				csa_ch_offset = IEEE80211_HT_IE_CHA_SEC_NONE;
+				break;
+			}
+
+			/* change to ieee channel width */
+			switch(csa_ch_width) {
+				case CHANNEL_WIDTH_20:
+				case CHANNEL_WIDTH_40:
+					csa_ch_width = 0;
+					break;
+				case CHANNEL_WIDTH_80:
+				case CHANNEL_WIDTH_160:
+				case CHANNEL_WIDTH_80_80:
+					csa_ch_width = 1;
+					break;
+				default:
+					csa_ch_width = 0;
+				break;
+			}
+
+			RTW_INFO("ECSA: mode=%d, class=%d, ch=%d, cnt=%d\n",
+				 rfctl->ecsa_mode, rfctl->ecsa_op_class,
+				 ch, csa_switch_cnt);
+			break;
+#endif
 		default:
 			break;
 		}
@@ -2859,14 +2935,25 @@ void process_csa_ie(_adapter *padapter, u8 *ies, uint ies_len)
 	if (ch != 0) {
 		struct dvobj_priv *dvobj = adapter_to_dvobj(padapter);
 		_adapter *pri_adapter = dvobj_get_primary_adapter(dvobj);
-		
+		u8 ifbmp_m = rtw_mi_get_ap_mesh_ifbmp(pri_adapter);
+
 		rfctl->csa_ch = ch;
 		rfctl->csa_switch_cnt = csa_switch_cnt;
 		rfctl->csa_ch_offset = csa_ch_offset;
 		rfctl->csa_ch_width = csa_ch_width;
 		rfctl->csa_ch_freq_seg0 = csa_ch_freq_seg0;
 		rfctl->csa_ch_freq_seg1 = csa_ch_freq_seg1;
-		
+
+		#ifdef CONFIG_AP_MODE
+		if(ifbmp_m) {
+			rfctl->ap_csa_en = STA_RX_CSA;
+			rfctl->ap_csa_wait_update_bcn = 0;
+			rfctl->ap_csa_ch = ch;
+			rfctl->ap_csa_switch_cnt = csa_switch_cnt;
+			rtw_set_ap_csa_cmd(pri_adapter);
+		}
+		#endif
+
 		countdown = pmlmeinfo->network.Configuration.BeaconPeriod * (csa_switch_cnt+1); /* ms */
 		RTW_INFO("csa: set countdown timer to %d ms\n", countdown);
 		_set_timer(&pri_adapter->mlmeextpriv.csa_timer, countdown);

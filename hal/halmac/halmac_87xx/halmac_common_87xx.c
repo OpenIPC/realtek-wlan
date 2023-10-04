@@ -2741,6 +2741,7 @@ get_version_87xx(struct halmac_adapter *adapter, struct halmac_ver *ver)
 	ver->major_ver = (u8)HALMAC_MAJOR_VER;
 	ver->prototype_ver = (u8)HALMAC_PROTOTYPE_VER;
 	ver->minor_ver = (u8)HALMAC_MINOR_VER;
+	ver->patch_ver = (u8)HALMAC_PATCH_VER;
 
 	PLTFM_MSG_TRACE("[TRACE]%s <===\n", __func__);
 

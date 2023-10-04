@@ -375,6 +375,7 @@ int _rtw_xmit_entry(_pkt *pkt, _nic_hdl pnetdev)
 {
 	_adapter *padapter = (_adapter *)rtw_netdev_priv(pnetdev);
 	struct xmit_priv *pxmitpriv = &padapter->xmitpriv;
+	struct pwrctrl_priv *pwrpriv = adapter_to_pwrctl(padapter);
 #ifdef CONFIG_TCP_CSUM_OFFLOAD_TX	
 	struct sk_buff *skb = pkt;
 	struct sk_buff *segs, *nskb;
@@ -397,6 +398,13 @@ int _rtw_xmit_entry(_pkt *pkt, _nic_hdl pnetdev)
 		DBG_COUNTER(padapter->tx_logs.os_tx_err_up);
 		#ifdef DBG_TX_DROP_FRAME
 		RTW_INFO("DBG_TX_DROP_FRAME %s if_up fail\n", __FUNCTION__);
+		#endif
+		goto drop_packet;
+	}
+
+	if (pwrpriv->bInSuspend == _TRUE) {
+		#ifdef DBG_TX_DROP_FRAME
+		RTW_INFO("DBG_TX_DROP_FRAME %s in suspend flow\n", __FUNCTION__);
 		#endif
 		goto drop_packet;
 	}
@@ -514,7 +522,11 @@ fail:
 }
 #endif
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 32))
+netdev_tx_t rtw_xmit_entry(_pkt *pkt, _nic_hdl pnetdev)
+#else
 int rtw_xmit_entry(_pkt *pkt, _nic_hdl pnetdev)
+#endif
 {
 	_adapter *padapter = (_adapter *)rtw_netdev_priv(pnetdev);
 	struct	mlme_priv	*pmlmepriv = &(padapter->mlmepriv);
@@ -523,7 +535,8 @@ int rtw_xmit_entry(_pkt *pkt, _nic_hdl pnetdev)
 	if (pkt) {
 #ifdef CONFIG_CUSTOMER_ALIBABA_GENERAL
 		if (check_alibaba_meshpkt(pkt)) {
-			return rtw_alibaba_mesh_xmit_entry(pkt, pnetdev);
+			ret = rtw_alibaba_mesh_xmit_entry(pkt, pnetdev);
+			goto out;
 		}
 #endif
 		if (check_fwstate(pmlmepriv, WIFI_MONITOR_STATE) == _TRUE) {
@@ -538,5 +551,12 @@ int rtw_xmit_entry(_pkt *pkt, _nic_hdl pnetdev)
 
 	}
 
+#ifdef CONFIG_CUSTOMER_ALIBABA_GENERAL
+out:
+#endif
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 32))
+	return (ret == 0) ? NETDEV_TX_OK : NETDEV_TX_BUSY;
+#else
 	return ret;
+#endif
 }

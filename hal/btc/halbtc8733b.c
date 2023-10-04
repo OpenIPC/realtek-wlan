@@ -19,8 +19,6 @@
 
 static u8 *trace_buf = &gl_btc_trace_buf[0];
 
-static const u32 bt_desired_ver_8733b = 0x01;
-
 /* rssi express in percentage % (dbm = % - 100)  */
 static const u8 wl_rssi_step_8733b[] = {60, 50, 44, 30};
 static const u8 bt_rssi_step_8733b[] = {8, 15, 20, 25};
@@ -59,7 +57,12 @@ static const struct btc_coex_table_para table_sant_8733b[] = {
 				{0x66556655, 0x66556655},
 				{0x66556aaa, 0x6a5a6aaa}, /*case-30*/
 				{0xffffffff, 0x5aaa5aaa},
-				{0x56555555, 0x5a5a5aaa} };
+				{0x56555555, 0x5a5a5aaa},
+				{0xdaffdaff, 0xdaffdaff},
+				{0x6a555a5a, 0x5a5a5a5a},
+				{0xe5555555, 0xe5555555}, /*case-35*/
+				{0xea5a5a5a, 0xea5a5a5a},
+				{0xea6a6a6a, 0xea6a6a6a} };
 
 /* Non-Shared-Antenna Coex Table */
 static const struct btc_coex_table_para table_nsant_8733b[] = {
@@ -86,7 +89,8 @@ static const struct btc_coex_table_para table_nsant_8733b[] = {
 				{0xffffffff, 0xaaaaaaaa},/*case-120*/
 				{0x55ff55ff, 0x5afa5afa},
 				{0x55ff55ff, 0xaaaaaaaa},
-				{0x55ff55ff, 0x55ff55ff} };
+				{0x55ff55ff, 0x55ff55ff},
+				{0x6f555f5f, 0xfafafafa} };
 
 /* Shared-Antenna TDMA*/
 static const struct btc_tdma_para tdma_sant_8733b[] = {
@@ -143,38 +147,85 @@ static const struct btc_tdma_para tdma_nsant_8733b[] = {
 				{ {0x51, 0x30, 0x03, 0x10, 0x50} },
 				{ {0x51, 0x20, 0x03, 0x10, 0x50} },
 				{ {0x51, 0x10, 0x03, 0x10, 0x50} }, /*case-120*/
-				{ {0x51, 0x08, 0x03, 0x10, 0x50} } };
+				{ {0x51, 0x08, 0x03, 0x10, 0x50} },
+				{ {0x61, 0x30, 0x03, 0x10, 0x11} },
+				{ {0x61, 0x08, 0x03, 0x10, 0x11} },
+				{ {0x61, 0x08, 0x07, 0x10, 0x14} },
+				{ {0x61, 0x08, 0x03, 0x10, 0x10} }, /*case-125*/
+				{ {0x61, 0x08, 0x03, 0x11, 0x15} } };
 
 /* wl_tx_dec_power, bt_tx_dec_power, wl_rx_gain, bt_rx_lna_constrain */
 static const struct btc_rf_para rf_para_tx_8733b[] = {
 				{0, 0, FALSE, 7},  /* for normal */
 				{0, 16, FALSE, 7}, /* for WL-CPT */
-				{8, 17, TRUE, 4},
-				{7, 18, TRUE, 4},
-				{6, 19, TRUE, 4},
-				{5, 20, TRUE, 4} };
+				{11, 8, TRUE, 7},  /* 2 for RCU SDR*/
+				{11, 8, TRUE, 7},
+				{7, 8, TRUE, 7},
+				{6, 8, TRUE, 7},
+				{0, 4, TRUE, 5},  /* 6 for RCU OFC*/
+				{0, 5, TRUE, 5},
+				{0, 7, TRUE, 5},
+				{0, 7, TRUE, 5},
+				{11, 8, TRUE, 7},   /* 10 for A2DP SDR*/
+				{11, 8, TRUE, 7},
+				{7, 8, TRUE, 7},
+				{6, 8, TRUE, 7},
+				{0, 4, TRUE, 5},   /* 14 for A2DP OFC*/
+				{0, 5, TRUE, 5},
+				{0, 7, TRUE, 5},
+				{0, 7, TRUE, 5},
+				{11, 8, TRUE, 7},  /* 18 for A2DP+RCU SDR*/
+				{11, 8, TRUE, 7},
+				{7, 8, TRUE, 7},
+				{6, 8, TRUE, 7},
+				{0, 4, TRUE, 5},  /* 22 for A2DP+RCU OFC*/
+				{0, 5, TRUE, 5},
+				{0, 7, TRUE, 5},
+				{0, 7, TRUE, 5} };
 
 static const struct btc_rf_para rf_para_rx_8733b[] = {
 				{0, 0, FALSE, 7},  /* for normal */
 				{0, 16, FALSE, 7}, /* for WL-CPT */
-				{3, 24, TRUE, 5},
-				{2, 26, TRUE, 5},
-				{1, 27, TRUE, 5},
-				{0, 28, TRUE, 5} };
+				{11, 8, TRUE, 7},  /* 2 for RCU SDR*/
+				{11, 8, TRUE, 7},
+				{7, 8, TRUE, 7},
+				{6, 8, TRUE, 7},
+				{0, 4, TRUE, 7},  /* 6 for RCU OFC*/
+				{0, 5, TRUE, 7},
+				{0, 7, TRUE, 7},
+				{0, 7, TRUE, 7},
+				{11, 8, TRUE, 7},   /* 10 for A2DP SDR*/
+				{11, 8, TRUE, 7},
+				{7, 8, TRUE, 7},
+				{6, 8, TRUE, 7},
+				{0, 4, TRUE, 7},   /* 14 for A2DP OFC*/
+				{0, 5, TRUE, 7},
+				{0, 7, TRUE, 7},
+				{0, 7, TRUE, 7},
+				{11, 8, TRUE, 7},  /* 18 for A2DP+RCU SDR*/
+				{11, 8, TRUE, 7},
+				{7, 8, TRUE, 7},
+				{6, 8, TRUE, 7},
+				{0, 4, TRUE, 7},  /* 22 for A2DP+RCU OFC*/
+				{0, 5, TRUE, 7},
+				{0, 7, TRUE, 7},
+				{0, 7, TRUE, 7} };
 
 const struct btc_5g_afh_map afh_5g_8733b[] = { {0, 0, 0} };
 
 const struct btc_chip_para btc_chip_para_8733b = {
 	"8733b",				/*.chip_name */
-	20201015,				/*.para_ver_date */
-	0x02,					/*.para_ver */
-	0x01,					/* bt_desired_ver */
-	0x10004,				/* wl_desired_ver */
+	20230616,				/*.para_ver_date */
+	0x0e,					/*.para_ver */
+	0x0c,					/* bt_desired_ver */
+	0x1000c,				/* wl_desired_ver */
 	TRUE,					/* scbd_support */
 	0xac,					/* scbd_reg*/
 	BTC_SCBD_32_BIT,			/* scbd_bit_num */
+	FALSE,					/* le_audio_support */
 	TRUE,					/* mailbox_support*/
 	FALSE,					/* lte_indirect_access */
+	TRUE,					/* new_scbd9_def */
 	TRUE,					/* new_scbd10_def */
 	BTC_INDIRECT_1700,			/* indirect_type */
 	BTC_PSTDMA_FORCE_LPSOFF,		/* pstdma_type */
@@ -187,9 +238,9 @@ const struct btc_chip_para btc_chip_para_8733b = {
 	ARRAY_SIZE(bt_rssi_step_8733b),		/*.bt_rssi_step_num */
 	bt_rssi_step_8733b,			/*.bt_rssi_step */
 	ARRAY_SIZE(table_sant_8733b),		/*.table_sant_num */
-	table_sant_8733b,			/*.table_sant = */ 
+	table_sant_8733b,			/*.table_sant = */
 	ARRAY_SIZE(table_nsant_8733b),		/*.table_nsant_num */
-	table_nsant_8733b,			/*.table_nsant = */ 
+	table_nsant_8733b,			/*.table_nsant = */
 	ARRAY_SIZE(tdma_sant_8733b),		/*.tdma_sant_num */
 	tdma_sant_8733b,			/*.tdma_sant = */
 	ARRAY_SIZE(tdma_nsant_8733b),		/*.tdma_nsant_num */
@@ -206,7 +257,7 @@ const struct btc_chip_para btc_chip_para_8733b = {
 
 void halbtc8733b_cfg_init(struct btc_coexist *btc)
 {
-	u8 u8tmp = 0;
+	u32 scbd_32;
 
 	/* enable TBTT nterrupt */
 	btc->btc_write_1byte_bitmask(btc, 0x550, 0x8, 0x1);
@@ -228,11 +279,30 @@ void halbtc8733b_cfg_init(struct btc_coexist *btc)
 	/*GNT_BT=1 while select both */
 	btc->btc_write_1byte_bitmask(btc, 0x763, BIT(4), 0x1);
 
-	/* BT_CCA = ~GNT_WL_BB, (not or GNT_BT_BB, LTE_Rx */
-	btc->btc_write_1byte_bitmask(btc, 0x4fc, 0x3, 0x0);
+#if 1
+	/* Standby mode setting = RX mode setting*/
+	//btc->btc_set_rf_reg(btc, BTC_RF_A, 0xef, 0x80000, 0x1);
+	//btc->btc_set_rf_reg(btc, BTC_RF_A, 0x33, 0xf, 0x1);
+	//btc->btc_set_rf_reg(btc, BTC_RF_A, 0x3f, 0xfffff, 0x320a3);
+	//btc->btc_set_rf_reg(btc, BTC_RF_A, 0xef, 0x80000, 0x0);
+	btc->btc_set_rf_reg(btc, BTC_RF_B, 0xef, 0x80000, 0x1);
+	btc->btc_set_rf_reg(btc, BTC_RF_B, 0x33, 0xf, 0x1);
+	btc->btc_set_rf_reg(btc, BTC_RF_B, 0x3f, 0xfffff, 0x341a3);
+	btc->btc_set_rf_reg(btc, BTC_RF_B, 0xef, 0x80000, 0x0);
+#endif
+	if (btc->board_info.btdm_ant_num == 2) {
+		/* COEX-464: To avoid wifi reduce power when GNT_BT = 1 */
+		btc->btc_write_1byte_bitmask(btc, 0x43a9, 0xf0, 0x0);
+		btc->btc_write_1byte_bitmask(btc, 0x4304, BIT(7), 0x0);
+	}
 
-	/* To avoid RF parameter error */
-	btc->btc_set_rf_reg(btc, BTC_RF_B, 0x1, 0xfffff, 0x40000);
+	/*Check if BT off, wifi write scbd[15] = 1 & reg setting; if BT on, no action*/
+	if (!(btc->btc_read_scbd_32bit(btc, &scbd_32) & BIT(15))) {
+		btc->btc_write_scbd_32bit(btc, BIT(15), TRUE);
+		btc->btc_write_1byte_bitmask(btc, 0x1064, 0xC0, 0x2);
+		btc->btc_write_1byte_bitmask(btc, 0x1065, BIT(0), 0x0);
+		btc->btc_write_1byte_bitmask(btc, 0x1066, 0xE0, 0x1);
+	}
 }
 
 void halbtc8733b_cfg_ant_switch(struct btc_coexist *btc)
@@ -249,9 +319,8 @@ void halbtc8733b_cfg_gnt_debug(struct btc_coexist *btc)
 	btc->btc_write_1byte_bitmask(btc, 0x42, BIT(3), 0);
 	btc->btc_write_1byte_bitmask(btc, 0x65, BIT(7), 0);
 
-	btc->btc_write_1byte_bitmask(btc, 0x10de, 0x1f, 0x1b);
-	btc->btc_write_1byte_bitmask(btc, 0x10df, 0x1f, 0x1b);
-
+	//btc->btc_write_1byte_bitmask(btc, 0x10de, 0x1f, 0x1b);
+	//btc->btc_write_1byte_bitmask(btc, 0x10df, 0x1f, 0x1b);
 	//btc->btc_write_scbd(btc, BTC_SCBD_MAILBOX_DBG, TRUE);
 }
 
@@ -274,13 +343,18 @@ void halbtc8733b_cfg_rfe_type(struct btc_coexist *btc)
 
 	switch (rfe_type->rfe_module_type){
 	case 2:
+	case 4:
+	case 9:
 		rfe_type->wlg_at_btg = TRUE;
+		if (coex_sta->kt_ver <= 2) {
+			/*Before C cut, BT power cut mode to avoid BT cannot use
+			  BTC should write W->B scbd[15] = 1
+			*/
+			btc->btc_write_scbd_32bit(btc, BTC_SCBD_WLS1, TRUE);
+		}
 		break;
 	case 3:
 		rfe_type->wlg_at_btg = FALSE;
-		break;
-	case 4:
-		rfe_type->wlg_at_btg = TRUE;
 		break;
 	case 5:
 		rfe_type->wlg_at_btg = FALSE;
@@ -296,17 +370,8 @@ void halbtc8733b_cfg_rfe_type(struct btc_coexist *btc)
 	default:
 		break;
 	}
-	
+
 	coex_sta->rf4ce_en = FALSE;
-
-	/* Disable LTE Coex Function in WiFi side */
-	//btc->btc_write_linderct(btc, 0x38, BIT(7), 0);
-
-	/* BTC_CTT_WL_VS_LTE  */
-	//btc->btc_write_linderct(btc, 0xa0, 0xffff, 0xffff);
-
-	/*  BTC_CTT_BT_VS_LTE */
-	//btc->btc_write_linderct(btc, 0xa4, 0xffff, 0xffff);
 }
 
 void halbtc8733b_cfg_coexinfo_hw(struct btc_coexist *btc)
@@ -324,7 +389,6 @@ void halbtc8733b_cfg_coexinfo_hw(struct btc_coexist *btc)
 		   "Path Owner",((u8tmp[0] & BIT(2)) ? "WL" : "BT"));
 	CL_PRINTF(cli_buf);
 
-	/*TODO: 8733b GPIO dbg on/off setting, 0x10dc*/
 	CL_SPRINTF(cli_buf, BT_TMP_BUF_SIZE,
 		   "\r\n %-35s = RF:%s_BB:%s/ RF:%s_BB:%s/ 0x%x",
 		   "GNT_WL_Ctrl/GNT_BT_Ctrl/0x10dc",
@@ -391,6 +455,15 @@ void halbtc8733b_cfg_coexinfo_hw(struct btc_coexist *btc)
 		   (u8tmp[1] & 0x2) ? "On" : "Off", u8tmp[2]);
 	CL_PRINTF(cli_buf);
 
+	u8tmp[0] = btc->btc_read_1byte(btc, 0x43a9);
+	u8tmp[1] = btc->btc_read_1byte(btc, 0x4304);
+
+	CL_SPRINTF(cli_buf, BT_TMP_BUF_SIZE,
+		   "\r\n %-35s = 0x%x/ 0x%x",
+		   "43a9/4304[7]",
+		   u8tmp[0], (int)((u8tmp[1] & BIT(7)) >> 7));
+	CL_PRINTF(cli_buf);
+
 	u8tmp[0] = btc->btc_read_1byte(btc, 0xf8e);
 	u8tmp[1] = btc->btc_read_1byte(btc, 0xf8f);
 	u8tmp[2] = btc->btc_read_1byte(btc, 0xd14);
@@ -410,6 +483,24 @@ void halbtc8733b_cfg_wl_tx_power(struct btc_coexist *btc)
 	struct btc_coex_dm *coex_dm = &btc->coex_dm;
 
 	btc->btc_reduce_wl_tx_power(btc, coex_dm->cur_wl_pwr_lvl);
+}
+
+void halbtc8733b_set_BB_CCK_setting(struct btc_coexist *btc)
+{
+	struct btc_coex_sta *coex_sta = &btc->coex_sta;
+	u32 R_0x1a68;
+
+	R_0x1a68 = btc->btc_read_4byte(btc, 0x1a68);
+
+	if (coex_sta->bt_disabled) {
+		if (!(R_0x1a68 & BIT(8))) {
+			btc->btc_write_1byte_bitmask(btc, 0x1a69, BIT(0), 0x1);
+		}
+	} else {
+		if (R_0x1a68 & BIT(8)) {
+			btc->btc_write_1byte_bitmask(btc, 0x1a69, BIT(0), 0x0);
+		}
+	}
 }
 
 void halbtc8733b_cfg_wl_rx_gain(struct btc_coexist *btc)
@@ -439,14 +530,12 @@ void halbtc8733b_cfg_wl_rx_gain(struct btc_coexist *btc)
 			wl_rx_gain_on = wl_rx_gain_on_HT20;
 		for (i = 0; i < ARRAY_SIZE(wl_rx_gain_on); i++)
 			btc->btc_write_4byte(btc, 0x1d90, wl_rx_gain_on[i]);
-
-		/* set Rx filter corner RCK offset */
-		btc->btc_set_rf_reg(btc, BTC_RF_A, 0xde, 0xfffff, 0x22);
-		btc->btc_set_rf_reg(btc, BTC_RF_A, 0x1d, 0xfffff, 0x36);
-		btc->btc_set_rf_reg(btc, BTC_RF_B, 0xde, 0xfffff, 0x22);
-		btc->btc_set_rf_reg(btc, BTC_RF_B, 0x1d, 0xfffff, 0x36);
 #endif
-
+		/* set Rx filter corner RCK offset */
+		btc->btc_set_rf_reg(btc, BTC_RF_A, 0xde, 0x2, 0x1);
+		btc->btc_set_rf_reg(btc, BTC_RF_A, 0x1d, 0x3f, 0x3F);
+		btc->btc_set_rf_reg(btc, BTC_RF_B, 0xde, 0x2, 0x1);
+		btc->btc_set_rf_reg(btc, BTC_RF_B, 0x1d, 0x3f, 0x3F);
 	} else {
 		BTC_SPRINTF(trace_buf, BT_TMP_BUF_SIZE,
 			    "[BTCoex], Hi-Li Table Off!\n");
@@ -459,14 +548,16 @@ void halbtc8733b_cfg_wl_rx_gain(struct btc_coexist *btc)
 			wl_rx_gain_off = wl_rx_gain_off_HT20;
 		for (i = 0; i < ARRAY_SIZE(wl_rx_gain_off); i++)
 			btc->btc_write_4byte(btc, 0x1d90, wl_rx_gain_off[i]);
-
-		/* set Rx filter corner RCK offset */
-		btc->btc_set_rf_reg(btc, BTC_RF_A, 0xde, 0xfffff, 0x20);
-		btc->btc_set_rf_reg(btc, BTC_RF_A, 0x1d, 0xfffff, 0x0);
-		btc->btc_set_rf_reg(btc, BTC_RF_B, 0xde, 0xfffff, 0x20);
-		btc->btc_set_rf_reg(btc, BTC_RF_B, 0x1d, 0xfffff, 0x0);
 #endif
+		/* disable Rx filter corner RCK offset */
+		btc->btc_set_rf_reg(btc, BTC_RF_A, 0xde, 0x2, 0x0);
+		btc->btc_set_rf_reg(btc, BTC_RF_A, 0x1d, 0x3f, 0x0);
+		btc->btc_set_rf_reg(btc, BTC_RF_B, 0xde, 0x2, 0x0);
+		btc->btc_set_rf_reg(btc, BTC_RF_B, 0x1d, 0x3f, 0x0);
 	}
+
+	/* COEX-867: Fix CCK tp drop to 0 when BT on*/
+	halbtc8733b_set_BB_CCK_setting(btc);
 }
 
 void halbtc8733b_cfg_wlan_act_ips(struct btc_coexist *btc)

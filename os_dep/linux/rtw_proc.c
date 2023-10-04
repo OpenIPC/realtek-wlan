@@ -247,7 +247,11 @@ const int drv_proc_hdls_num = sizeof(drv_proc_hdls) / sizeof(struct rtw_proc_hdl
 static int rtw_drv_proc_open(struct inode *inode, struct file *file)
 {
 	/* struct net_device *dev = proc_get_parent_data(inode); */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 17, 0)
 	ssize_t index = (ssize_t)PDE_DATA(inode);
+#else
+	ssize_t index = (ssize_t)inode->i_private;
+#endif
 	const struct rtw_proc_hdl *hdl = drv_proc_hdls + index;
 	void *private = NULL;
 
@@ -273,7 +277,11 @@ static int rtw_drv_proc_open(struct inode *inode, struct file *file)
 
 static ssize_t rtw_drv_proc_write(struct file *file, const char __user *buffer, size_t count, loff_t *pos)
 {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 17, 0)
 	ssize_t index = (ssize_t)PDE_DATA(file_inode(file));
+#else
+	ssize_t index = (ssize_t)file_inode(file)->i_private;
+#endif
 	const struct rtw_proc_hdl *hdl = drv_proc_hdls + index;
 	ssize_t (*write)(struct file *, const char __user *, size_t, loff_t *, void *) = hdl->write;
 
@@ -5167,6 +5175,48 @@ int proc_get_cur_beacon_keys(struct seq_file *m, void *v)
 	return 0;
 }
 
+static int proc_get_wpas_info(struct seq_file *m, void *v)
+{
+	struct net_device *dev = m->private;
+	_adapter *padapter = (_adapter *)rtw_netdev_priv(dev);
+
+	RTW_PRINT_SEL(m, "WPAS_INFO: %s\n",
+		(RTW_WPAS_W1FI == adapter_to_dvobj(padapter)->wpas_type) ? "w1.fi (0)" : "android (1)");
+
+	return 0;
+}
+
+static ssize_t proc_set_wpas_info(struct file *file,
+	const char __user *buffer, size_t count, loff_t *pos, void *data)
+{
+	struct net_device *dev = data;
+	_adapter *padapter = (_adapter *)rtw_netdev_priv(dev);
+	char tmp[32];
+	int val;
+
+	if (count < 1)
+		return -EINVAL;
+
+	if (count > sizeof(tmp)) {
+		rtw_warn_on(1);
+		return -EFAULT;
+	}
+
+	if (buffer && !copy_from_user(tmp, buffer, count)) {
+		int num = sscanf(tmp, "%d ", &val);
+
+		if (RTW_WPAS_W1FI == val)
+			adapter_to_dvobj(padapter)->wpas_type = RTW_WPAS_W1FI;
+		else if (RTW_WPAS_ANDROID == val)
+			adapter_to_dvobj(padapter)->wpas_type = RTW_WPAS_ANDROID;
+		else
+			return -EFAULT;
+	} else
+		return -EFAULT;
+
+	return count;
+}
+
 static int proc_get_amsdu_mode(struct seq_file *m, void *v)
 {
 	struct net_device *dev = m->private;
@@ -5680,15 +5730,24 @@ const struct rtw_proc_hdl adapter_proc_hdls[] = {
 	RTW_PROC_HDL_SSEQ("war_offload_mdns_service_info_txt_rsp", proc_get_war_offload_mdns_txt_rsp, proc_set_war_offload_mdns_txt_rsp),
 #endif /* CONFIG_OFFLOAD_MDNS_V4 || CONFIG_OFFLOAD_MDNS_V6 */
 #endif /* CONFIG_WAR_OFFLOAD */
+
+	RTW_PROC_HDL_SSEQ("wpas_info", proc_get_wpas_info, proc_set_wpas_info),
 	RTW_PROC_HDL_SSEQ("rtw_amsdu_mode", proc_get_amsdu_mode, proc_set_amsdu_mode),
 
+#if defined(CONFIG_CONCURRENT_MODE) && defined(CONFIG_AP_MODE)
+	RTW_PROC_HDL_SSEQ("ap_csa_cnt", proc_get_ap_csa_cnt, proc_set_ap_csa_cnt),
+#endif
 };
 
 const int adapter_proc_hdls_num = sizeof(adapter_proc_hdls) / sizeof(struct rtw_proc_hdl);
 
 static int rtw_adapter_proc_open(struct inode *inode, struct file *file)
 {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 17, 0)
 	ssize_t index = (ssize_t)PDE_DATA(inode);
+#else
+	ssize_t index = (ssize_t)inode->i_private;
+#endif
 	const struct rtw_proc_hdl *hdl = adapter_proc_hdls + index;
 	void *private = proc_get_parent_data(inode);
 
@@ -5714,7 +5773,11 @@ static int rtw_adapter_proc_open(struct inode *inode, struct file *file)
 
 static ssize_t rtw_adapter_proc_write(struct file *file, const char __user *buffer, size_t count, loff_t *pos)
 {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 17, 0)
 	ssize_t index = (ssize_t)PDE_DATA(file_inode(file));
+#else
+	ssize_t index = (ssize_t)file_inode(file)->i_private;
+#endif
 	const struct rtw_proc_hdl *hdl = adapter_proc_hdls + index;
 	ssize_t (*write)(struct file *, const char __user *, size_t, loff_t *, void *) = hdl->write;
 
@@ -5877,7 +5940,11 @@ const int odm_proc_hdls_num = sizeof(odm_proc_hdls) / sizeof(struct rtw_proc_hdl
 
 static int rtw_odm_proc_open(struct inode *inode, struct file *file)
 {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 17, 0)
 	ssize_t index = (ssize_t)PDE_DATA(inode);
+#else
+	ssize_t index = (ssize_t)inode->i_private;
+#endif
 	const struct rtw_proc_hdl *hdl = odm_proc_hdls + index;
 	void *private = proc_get_parent_data(inode);
 
@@ -5903,7 +5970,11 @@ static int rtw_odm_proc_open(struct inode *inode, struct file *file)
 
 static ssize_t rtw_odm_proc_write(struct file *file, const char __user *buffer, size_t count, loff_t *pos)
 {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 17, 0)
 	ssize_t index = (ssize_t)PDE_DATA(file_inode(file));
+#else
+	ssize_t index = (ssize_t)file_inode(file)->i_private;
+#endif
 	const struct rtw_proc_hdl *hdl = odm_proc_hdls + index;
 	ssize_t (*write)(struct file *, const char __user *, size_t, loff_t *, void *) = hdl->write;
 
@@ -6042,7 +6113,11 @@ const int mcc_proc_hdls_num = sizeof(mcc_proc_hdls) / sizeof(struct rtw_proc_hdl
 
 static int rtw_mcc_proc_open(struct inode *inode, struct file *file)
 {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 17, 0)
 	ssize_t index = (ssize_t)PDE_DATA(inode);
+#else
+	ssize_t index = (ssize_t)inode->i_private;
+#endif
 	const struct rtw_proc_hdl *hdl = mcc_proc_hdls + index;
 	void *private = proc_get_parent_data(inode);
 
@@ -6068,7 +6143,11 @@ static int rtw_mcc_proc_open(struct inode *inode, struct file *file)
 
 static ssize_t rtw_mcc_proc_write(struct file *file, const char __user *buffer, size_t count, loff_t *pos)
 {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 17, 0)
 	ssize_t index = (ssize_t)PDE_DATA(file_inode(file));
+#else
+	ssize_t index = (ssize_t)file_inode(file)->i_private;
+#endif
 	const struct rtw_proc_hdl *hdl = mcc_proc_hdls + index;
 	ssize_t (*write)(struct file *, const char __user *, size_t, loff_t *, void *) = hdl->write;
 

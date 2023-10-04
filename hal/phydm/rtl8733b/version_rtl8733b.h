@@ -28,6 +28,6 @@
   Since 01/Aug/2015, the commit rules will be simplified. You do not need to fill up the version.h anymore, 
   only the maintenance supervisor fills it before formal release.
 */
-#define	RELEASE_DATE_8733B		20201109
-#define	COMMIT_BY_8733B			"BB_ZENO"
-#define	RELEASE_VERSION_8733B	21
+#define	RELEASE_DATE_8733B		20230511
+#define	COMMIT_BY_8733B			"BB_dean"
+#define	RELEASE_VERSION_8733B 	38

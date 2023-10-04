@@ -20,11 +20,17 @@
 
 #ifdef LOAD_FW_HEADER_FROM_DRIVER
 #if (DM_ODM_SUPPORT_TYPE & (ODM_WIN)) || (DM_ODM_SUPPORT_TYPE & (ODM_CE))
-extern u8 array_mp_8733b_fw_nic[116576];
+extern u8 ccv_array_mp_8733b_fw_nic[122384];
+extern u32 ccv_array_length_mp_8733b_fw_nic;
+extern u8 array_mp_8733b_fw_nic[122008];
 extern u32 array_length_mp_8733b_fw_nic;
 #ifdef CONFIG_WOWLAN
-extern u8 array_mp_8733b_fw_wowlan[100184];
+extern u8 array_mp_8733b_fw_wowlan[112320];
 extern u32 array_length_mp_8733b_fw_wowlan;
+#endif /*CONFIG_WOWLAN*/
+#ifdef CONFIG_WOWLAN
+extern u8 ccv_array_mp_8733b_fw_wowlan[113048];
+extern u32 ccv_array_length_mp_8733b_fw_wowlan;
 #endif /*CONFIG_WOWLAN*/
 #endif
 #endif /* end of LOAD_FW_HEADER_FROM_DRIVER */

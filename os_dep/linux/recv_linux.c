@@ -209,7 +209,7 @@ void rtw_os_recv_resource_free(struct recv_priv *precvpriv)
 }
 
 #if defined(CONFIG_SDIO_HCI) || defined(CONFIG_GSPI_HCI)
-#if !defined(CONFIG_RTL8822B) && !defined(CONFIG_RTL8822C)
+#if !defined(CONFIG_RTL8822B) && !defined(CONFIG_RTL8822C) && !defined(CONFIG_RTL8733B)
 #ifdef CONFIG_SDIO_RX_COPY
 static int sdio_init_recvbuf_with_skb(struct recv_priv *recvpriv, struct recv_buf *rbuf, u32 size)
 {
@@ -249,7 +249,7 @@ static int sdio_init_recvbuf_with_skb(struct recv_priv *recvpriv, struct recv_bu
 	return _SUCCESS;
 }
 #endif /* CONFIG_SDIO_RX_COPY */
-#endif /* !defined(CONFIG_RTL8822B) && !defined(CONFIG_RTL8822C) */
+#endif /* !defined(CONFIG_RTL8822B) && !defined(CONFIG_RTL8822C) && !defined(CONFIG_RTL8733B) */
 #endif /* defined(CONFIG_SDIO_HCI) || defined(CONFIG_GSPI_HCI) */
 
 /* alloc os related resource in struct recv_buf */
@@ -286,7 +286,7 @@ int rtw_os_recvbuf_resource_alloc(_adapter *padapter, struct recv_buf *precvbuf,
 #endif /* CONFIG_USE_USB_BUFFER_ALLOC_RX */
 
 #elif defined(CONFIG_SDIO_HCI) || defined(CONFIG_GSPI_HCI)
-	#if !defined(CONFIG_RTL8822B) && !defined(CONFIG_RTL8822C)
+	#if !defined(CONFIG_RTL8822B) && !defined(CONFIG_RTL8822C) && !defined(CONFIG_RTL8733B)
 	#ifdef CONFIG_SDIO_RX_COPY
 	res = sdio_init_recvbuf_with_skb(&padapter->recvpriv, precvbuf, size);
 	#endif
@@ -399,14 +399,19 @@ static int napi_recv(_adapter *padapter, int budget)
 		rx_ok = _FALSE;
 
 #ifdef CONFIG_RTW_GRO
-		/*	 
+		/*
 			cloned SKB use dataref to avoid kernel release it.
 			But dataref changed in napi_gro_receive.
 			So, we should prevent cloned SKB go into napi_gro_receive.
 		*/
 		if (pregistrypriv->en_gro && !skb_cloned(pskb)) {
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 12, 0))
+			rtw_napi_gro_receive(&padapter->napi, pskb);
+			rx_ok = _TRUE;
+#else
 			if (rtw_napi_gro_receive(&padapter->napi, pskb) != GRO_DROP)
 				rx_ok = _TRUE;
+#endif
 			goto next;
 		}
 #endif /* CONFIG_RTW_GRO */
@@ -731,4 +736,3 @@ void rtw_os_read_port(_adapter *padapter, struct recv_buf *precvbuf)
 #endif
 
 }
-

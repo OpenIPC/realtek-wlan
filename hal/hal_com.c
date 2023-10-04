@@ -586,8 +586,11 @@ u8 MRateToHwRate(enum MGN_RATE rate)
 	if (rate < MGN_UNKNOWN)
 		hw_rate = _MRateToHwRate[rate];
 
-	if (rate != MGN_1M && hw_rate == DESC_RATE1M)
-		RTW_WARN("Invalid rate 0x%x in %s\n", rate, __FUNCTION__);
+	if (rate != MGN_1M && hw_rate == DESC_RATE1M) {
+		// The function can be called before tx_rate initialization,
+		// so it is ok to use default rate
+		RTW_DBG("Invalid rate 0x%x in %s\n", rate, __FUNCTION__);
+	}
 
 	return hw_rate;
 }
@@ -2869,8 +2872,14 @@ static void clear_mbssid_cam(_adapter *padapter, u8 cam_addr)
 
 void rtw_ap_set_mbid_num(_adapter *adapter, u8 ap_num)
 {
+#ifdef CONFIG_RTL8733B
+	/* [7:4] BIT_MBID_BCN_NUM_V2*/
+	rtw_write8(adapter, REG_MBID_NUM,
+		((rtw_read8(adapter, REG_MBID_NUM) & 0x0F) | (((ap_num -1) << 4) & 0xF0)));
+#else
 	rtw_write8(adapter, REG_MBID_NUM,
 		((rtw_read8(adapter, REG_MBID_NUM) & 0xF8) | ((ap_num -1) & 0x07)));
+#endif
 
 }
 void rtw_mbid_cam_enable(_adapter *adapter)
@@ -3023,8 +3032,13 @@ void rtw_ap_multi_bcn_cfg(_adapter *adapter)
 	/*no limit setting - 0x5A7 = 0xFF - Packet in Hi Queue Tx immediately*/
 	rtw_write8(adapter, REG_HIQ_NO_LMT_EN, 0xFF);
 
+#ifdef CONFIG_RTL8733B
+	/* Mask all beacon and enable bcn function will block ac queue */
+	RTW_INFO("%s() skip mask all bcn\n", __func__);
+#else
 	/*Mask all beacon*/
 	rtw_write8(adapter, REG_MBSSID_CTRL, 0);
+#endif
 
 	/*BCN invalid bit setting 0x454[6] = 1*/
 	/*rtw_write8(adapter, REG_CCK_CHECK, rtw_read8(adapter, REG_CCK_CHECK) | BIT_EN_BCN_PKT_REL);*/
@@ -4288,10 +4302,11 @@ s32 rtw_hal_set_default_port_id_cmd(_adapter *adapter, u8 mac_id)
 
 	return ret;
 }
+
 s32 rtw_set_default_port_id(_adapter *adapter)
 {
 	s32 ret = _SUCCESS;
-	struct sta_info		*psta;
+	struct sta_info *psta;
 	struct mlme_priv *pmlmepriv = &adapter->mlmepriv;
 
 	if (is_client_associated_to_ap(adapter)) {
@@ -4299,12 +4314,12 @@ s32 rtw_set_default_port_id(_adapter *adapter)
 		if (psta)
 			ret = rtw_hal_set_default_port_id_cmd(adapter, psta->cmn.mac_id);
 	} else if (check_fwstate(pmlmepriv, WIFI_AP_STATE) == _TRUE) {
-
+		ret = rtw_hal_set_default_port_id_cmd(adapter, 0);
 	} else {
 	}
-
 	return ret;
 }
+
 s32 rtw_set_ps_rsvd_page(_adapter *adapter)
 {
 	s32 ret = _SUCCESS;
@@ -5386,10 +5401,13 @@ static void rtw_hal_update_gtk_offload_info(_adapter *adapter)
 	struct security_priv *psecuritypriv = &adapter->securitypriv;
 	struct dvobj_priv *dvobj = adapter_to_dvobj(adapter);
 	struct cam_ctl_t *cam_ctl = &dvobj->cam_ctl;
+	struct stainfo_rxcache *rxcache = NULL;
+	struct sta_info *sta = NULL;
 	_irqL irqL;
 	u8 get_key[16];
-	u8 gtk_id = 0, offset = 0, i = 0, sz = 0, aoac_rpt_ver = 0, has_rekey = _FALSE;
-	u64 replay_count = 0, tmp_iv_hdr = 0, pkt_pn = 0;
+	u8 pn[8] = {0};
+	u8 gtk_id = 0, offset = 0, i = 0, aoac_rpt_ver = 0, has_rekey = _FALSE;
+	u64 replay_count = 0;
 
 	if (!MLME_IS_STA(adapter))
 		return;
@@ -5466,14 +5484,26 @@ static void rtw_hal_update_gtk_offload_info(_adapter *adapter)
 			KEY_ARG(psecuritypriv->dot118021XGrpKey[gtk_id].skey));
 	}
 
+	/* Update unicast RX IV */
+	sta = rtw_get_stainfo(&adapter->stapriv, get_bssid(&adapter->mlmepriv));
+	if (sta) {
+		if (rtw_iv_to_pn(paoac_rpt->rxptk_iv, pn, NULL,
+				 psecuritypriv->dot11PrivacyAlgrthm)) {
+			rxcache = &sta->sta_recvpriv.rxcache;
+			for (i = 0; i < TID_NUM; i++)
+				_rtw_memcpy(rxcache->iv[i], paoac_rpt->rxptk_iv,
+					    IV_LENGTH);
+			sta->dot11rxpn.val = RTW_GET_LE64(pn);
+			RTW_INFO("[wow] ptk_rx_pn = " PN_FMT "\n", PN_ARG(pn));
+		}
+	}
+
 	/* Update broadcast RX IV */
-	if (psecuritypriv->dot118021XGrpPrivacy == _AES_) {
-		sz = sizeof(psecuritypriv->iv_seq[0]);
-		for (i = 0 ; i < 4 ; i++) {
-			_rtw_memcpy(&tmp_iv_hdr, paoac_rpt->rxgtk_iv[i], sz);
-			tmp_iv_hdr = le64_to_cpu(tmp_iv_hdr);
-			pkt_pn = CCMPH_2_PN(tmp_iv_hdr);
-			_rtw_memcpy(psecuritypriv->iv_seq[i], &pkt_pn, sz);
+	for (i = 0; i < 4; i++) {
+		if (rtw_iv_to_pn(paoac_rpt->rxgtk_iv[i], pn, NULL,
+				 psecuritypriv->dot118021XGrpPrivacy)) {
+			_rtw_memcpy(psecuritypriv->iv_seq[i], pn, 8);
+			RTW_INFO("[wow] gtk_rx_pn[%u] = " PN_FMT "\n", i, PN_ARG(pn));
 		}
 	}
 
@@ -5573,38 +5603,18 @@ static void rtw_hal_update_tx_iv(_adapter *adapter)
 	struct mlme_ext_priv	*pmlmeext = &(adapter->mlmeextpriv);
 	struct mlme_ext_info	*pmlmeinfo = &(pmlmeext->mlmext_info);
 	struct security_priv	*psecpriv = &adapter->securitypriv;
-
-	u16 val16 = 0;
-	u32 val32 = 0;
-	u64 txiv = 0;
-	u8 *pval = NULL;
+	u8 pn[8] = {0};
 
 	psta = rtw_get_stainfo(&adapter->stapriv,
 			       get_my_bssid(&pmlmeinfo->network));
 
 	/* Update TX iv data. */
-	pval = (u8 *)&paoac_rpt->iv;
-
-	if (psecpriv->dot11PrivacyAlgrthm == _TKIP_) {
-		val16 = ((u16)(paoac_rpt->iv[2]) << 0) +
-			((u16)(paoac_rpt->iv[0]) << 8);
-		val32 = ((u32)(paoac_rpt->iv[4]) << 0) +
-			((u32)(paoac_rpt->iv[5]) << 8) +
-			((u32)(paoac_rpt->iv[6]) << 16) +
-			((u32)(paoac_rpt->iv[7]) << 24);
-	} else if (psecpriv->dot11PrivacyAlgrthm == _AES_) {
-		val16 = ((u16)(paoac_rpt->iv[0]) << 0) +
-			((u16)(paoac_rpt->iv[1]) << 8);
-		val32 = ((u32)(paoac_rpt->iv[4]) << 0) +
-			((u32)(paoac_rpt->iv[5]) << 8) +
-			((u32)(paoac_rpt->iv[6]) << 16) +
-			((u32)(paoac_rpt->iv[7]) << 24);
-	}
-
 	if (psta) {
-		txiv = val16 + ((u64)val32 << 16);
-		if (txiv != 0)
-			psta->dot11txpn.val = txiv;
+		if (rtw_iv_to_pn(paoac_rpt->iv, pn, NULL,
+				 psecpriv->dot11PrivacyAlgrthm)) {
+			psta->dot11txpn.val = RTW_GET_LE64(pn);
+			RTW_INFO("[wow] ptk_tx_pn = " PN_FMT "\n", PN_ARG(pn));
+		}
 	}
 }
 
@@ -5792,11 +5802,6 @@ static u8 rtw_hal_set_wowlan_ctrl_cmd(_adapter *adapter, u8 enable, u8 change_un
 	if (!ppwrpriv->wowlan_pno_enable &&
 		registry_par->wakeup_event & BIT(0) && !no_wake)
 		magic_pkt = enable;
-
-	if ((registry_par->wakeup_event & BIT(1)) &&
-		(psecpriv->dot11PrivacyAlgrthm == _WEP40_ ||
-		psecpriv->dot11PrivacyAlgrthm == _WEP104_) && !no_wake)
-			hw_unicast = 1;
 
 	if (registry_par->wakeup_event & BIT(2) && !no_wake)
 		discont_wake = enable;
@@ -9217,7 +9222,6 @@ static void rtw_hal_construct_remote_control_info(_adapter *adapter,
 	struct stainfo_rxcache *prxcache;
 	u8 cur_dot11rxiv[8], id = 0, tid_id = 0, i = 0;
 	size_t sz = 0, total = 0;
-	u64 ccmp_hdr = 0, tmp_key = 0;
 
 	psta = rtw_get_stainfo(pstapriv, get_bssid(pmlmepriv));
 
@@ -9258,15 +9262,15 @@ static void rtw_hal_construct_remote_control_info(_adapter *adapter,
 		total /= sizeof(psecuritypriv->iv_seq[0]);
 
 		for (i = 0 ; i < total ; i ++) {
-			ccmp_hdr =
-				le64_to_cpu(*(u64*)psecuritypriv->iv_seq[i]);
 			_rtw_memset(&cur_dot11rxiv, 0, sz);
-			if (ccmp_hdr != 0) {
-				tmp_key = i;
-				ccmp_hdr = PN_2_CCMPH(ccmp_hdr, tmp_key);
-				*(u64*)cur_dot11rxiv = cpu_to_le64(ccmp_hdr);
-				_rtw_memcpy(pframe, cur_dot11rxiv, sz);
-			}
+
+			rtw_pn_to_iv(psecuritypriv->iv_seq[i], cur_dot11rxiv, i,
+				     psecuritypriv->dot118021XGrpPrivacy);
+			_rtw_memcpy(pframe, cur_dot11rxiv, sz);
+
+			RTW_INFO("[wow] gtk_rx_iv[%u] = " IV_FMT "\n", i,
+				 IV_ARG(cur_dot11rxiv));
+
 			*pLength += sz;
 			pframe += sz;
 		}
@@ -10509,6 +10513,11 @@ static void rtw_hal_wow_enable(_adapter *adapter)
 
 #endif
 #if defined(CONFIG_USB_HCI) || defined(CONFIG_PCI_HCI)
+#ifndef CONFIG_USB_INBAND
+	/* don't generate usb toggle signal during suspend process */
+	if(_rtw_wow_chk_cap(adapter, WOW_CAP_DIS_INBAND_SIGNAL))
+		rtw_write8(adapter, 0xfe10, 0x19);
+#endif
 	/* Invoid SE0 reset signal during suspending*/
 	rtw_write8(adapter, REG_RSV_CTRL, 0x20);
 	if (IS_8188F(pHalData->version_id) == FALSE
@@ -12493,6 +12502,33 @@ static u8 rtw_hal_set_fw_bcn_early_c2h_rpt_cmd(struct _ADAPTER *adapter, u8 enab
 	return ret;
 }
 
+#ifdef CONFIG_FW_MULTI_PORT_SUPPORT
+u8 rtw_hal_set_ap_bcn_imr_cmd(struct _ADAPTER *adapter, u8 enable)
+{
+	u8 ap_port_id;
+	u8 ret = _FAIL;
+
+	if (!MLME_IS_AP(adapter))
+		goto exit;
+
+	ap_port_id = get_hw_port(adapter);
+	if (ap_port_id != HW_PORT0) {
+		RTW_WARN("AP mode should use port0\n");
+		goto exit;
+	}
+
+	ret = rtw_hal_fill_h2c_cmd(adapter,
+					H2C_SET_AP_BCN_IMR,
+					H2C_AP_BCN_MIR_LEN,
+					&enable);
+
+	RTW_INFO(FUNC_ADPT_FMT" : AP mode %s beacon early IMR\n",
+			FUNC_ADPT_ARG(adapter), enable ? "enable" : "disable");
+exit:
+	return ret;
+}
+#endif
+
 /**
  * rtw_hal_get_rsvd_page_num() - Get needed reserved page number
  * @adapter:	struct _ADAPTER*
@@ -13196,11 +13232,13 @@ u64 rtw_hal_get_tsftr_by_port(_adapter *adapter, u8 port)
 		break;
 	}
 #endif
-#if defined(CONFIG_RTL8814A) || defined(CONFIG_RTL8822B) || defined(CONFIG_RTL8821C) || defined(CONFIG_RTL8822C)
+#if defined(CONFIG_RTL8814A) || defined(CONFIG_RTL8822B) || defined(CONFIG_RTL8821C) \
+		|| defined(CONFIG_RTL8822C) || defined(CONFIG_RTL8733B)
 	case RTL8814A:
 	case RTL8822B:
 	case RTL8821C:
-	case RTL8822C:		
+	case RTL8822C:
+	case RTL8733B:
 	{
 		u8 val8;
 
@@ -14977,6 +15015,7 @@ void rtw_set_usb_agg_by_mode_normal(_adapter *padapter, u8 cur_wireless_mode)
 		remainder = MAX_RECVBUF_SZ % (4 * 1024);
 		quotient = (u8)(MAX_RECVBUF_SZ >> 12);
 
+#ifdef CONFIG_PLATFORM_I386_PC
 		if (quotient > 5) {
 			pHalData->rxagg_usb_size = 0x6;
 			pHalData->rxagg_usb_timeout = 0x10;
@@ -14989,13 +15028,25 @@ void rtw_set_usb_agg_by_mode_normal(_adapter *padapter, u8 cur_wireless_mode)
 				pHalData->rxagg_usb_timeout = 0x10;
 			}
 		}
+#else
+		/* Avoid the Synopsys USB host receive buffer size limit */
+		if (quotient > 4)
+			pHalData->rxagg_usb_size = 0x4;
+		pHalData->rxagg_usb_timeout = 0x10;
+#endif
+
 #else /* !CONFIG_PREALLOC_RX_SKB_BUFFER */
+#ifdef CONFIG_PLATFORM_I386_PC
 		if (0x6 != pHalData->rxagg_usb_size || 0x10 != pHalData->rxagg_usb_timeout) {
 			pHalData->rxagg_usb_size = 0x6;
 			pHalData->rxagg_usb_timeout = 0x10;
 			rtw_write16(padapter, REG_RXDMA_AGG_PG_TH,
 				pHalData->rxagg_usb_size | (pHalData->rxagg_usb_timeout << 8));
 		}
+#else
+		/* Avoid the Synopsys USB host receive buffer size limit */
+		rtw_write16(padapter, REG_RXDMA_AGG_PG_TH, 0x1004);
+#endif
 #endif /* CONFIG_PREALLOC_RX_SKB_BUFFER */
 
 	} else if (cur_wireless_mode >= WIRELESS_11_24N
@@ -15007,6 +15058,7 @@ void rtw_set_usb_agg_by_mode_normal(_adapter *padapter, u8 cur_wireless_mode)
 		remainder = MAX_RECVBUF_SZ % (4 * 1024);
 		quotient = (u8)(MAX_RECVBUF_SZ >> 12);
 
+#ifdef CONFIG_PLATFORM_I386_PC
 		if (quotient > 5) {
 			pHalData->rxagg_usb_size = 0x5;
 			pHalData->rxagg_usb_timeout = 0x20;
@@ -15019,13 +15071,24 @@ void rtw_set_usb_agg_by_mode_normal(_adapter *padapter, u8 cur_wireless_mode)
 				pHalData->rxagg_usb_timeout = 0x10;
 			}
 		}
+#else
+		/* Avoid the Synopsys USB host receive buffer size limit */
+		if (quotient > 4)
+			pHalData->rxagg_usb_size = 0x4;
+		pHalData->rxagg_usb_timeout = 0x10;
+#endif
 #else /* !CONFIG_PREALLOC_RX_SKB_BUFFER */
+#ifdef CONFIG_PLATFORM_I386_PC
 		if ((0x5 != pHalData->rxagg_usb_size) || (0x20 != pHalData->rxagg_usb_timeout)) {
 			pHalData->rxagg_usb_size = 0x5;
 			pHalData->rxagg_usb_timeout = 0x20;
 			rtw_write16(padapter, REG_RXDMA_AGG_PG_TH,
 				pHalData->rxagg_usb_size | (pHalData->rxagg_usb_timeout << 8));
 		}
+#else
+		/* Avoid the Synopsys USB host receive buffer size limit */
+		rtw_write16(padapter, REG_RXDMA_AGG_PG_TH, 0x1004);
+#endif
 #endif /* CONFIG_PREALLOC_RX_SKB_BUFFER */
 
 	} else {
@@ -15095,10 +15158,18 @@ void dm_DynamicUsbTxAgg(_adapter *padapter, u8 from_timer)
 		if ((pHalData->rxagg_mode == RX_AGG_USB) && (check_fwstate(pmlmepriv, WIFI_ASOC_STATE) == _TRUE)) {
 			if (pdvobjpriv->traffic_stat.cur_tx_tp > 2 && pdvobjpriv->traffic_stat.cur_rx_tp < 30)
 				rtw_write16(padapter , REG_RXDMA_AGG_PG_TH , 0x1010);
+#ifdef CONFIG_PLATFORM_I386_PC
 			else if (pdvobjpriv->traffic_stat.last_tx_bytes > 220000 && pdvobjpriv->traffic_stat.cur_rx_tp < 30)
 				rtw_write16(padapter , REG_RXDMA_AGG_PG_TH , 0x1006);
 			else
 				rtw_write16(padapter, REG_RXDMA_AGG_PG_TH, 0x2005); /* dmc agg th 20K */
+#else
+			/* Avoid the Synopsys USB host receive buffer size limit */
+			else if (pdvobjpriv->traffic_stat.last_tx_bytes > 220000 && pdvobjpriv->traffic_stat.cur_rx_tp < 30)
+				rtw_write16(padapter , REG_RXDMA_AGG_PG_TH , 0x1004);
+			else
+				rtw_write16(padapter, REG_RXDMA_AGG_PG_TH, 0x2004); /* dmc agg th 20K */
+#endif
 
 			/* RTW_INFO("TX_TP=%u, RX_TP=%u\n", pdvobjpriv->traffic_stat.cur_tx_tp, pdvobjpriv->traffic_stat.cur_rx_tp); */
 		}
@@ -16723,9 +16794,12 @@ void rtw_leave_protsel_macsleep(_adapter *padapter)
 
 void rtw_hal_bcn_early_rpt_c2h_handler(_adapter *padapter)
 {
-
 	if(0)
 		RTW_INFO("Recv Bcn Early report!!\n");
+
+#ifdef CONFIG_AP_MODE
+	rtw_mi_update_csa(padapter);
+#endif
 
 #ifdef CONFIG_TDLS
 #ifdef CONFIG_TDLS_CH_SW
@@ -16734,3 +16808,11 @@ void rtw_hal_bcn_early_rpt_c2h_handler(_adapter *padapter)
 #endif
 #endif
 }
+
+#ifdef RTW_DETECT_HANG
+void rtw_hal_is_hang_check(_adapter *padapter)
+{
+	if (rtw_is_hw_init_completed(padapter))
+		rtw_hal_get_hwreg(padapter, HW_VAR_DETECT_RXFF_HANG, NULL);
+}
+#endif /* RTW_DETECT_HANG */

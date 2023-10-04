@@ -225,8 +225,15 @@ struct rx_pkt_attrib	{
 /* #define REORDER_ENTRY_NUM	128 */
 #define REORDER_WAIT_TIME	(50) /* (ms) */
 
-#if defined(CONFIG_PLATFORM_RTK390X) && defined(CONFIG_USB_HCI)
+#ifdef CONFIG_USB_HCI
+#ifdef CONFIG_PLATFORM_I386_PC
+	#define RECVBUFF_ALIGN_SZ 8
+#elif defined(CONFIG_PLATFORM_RTK390X)
 	#define RECVBUFF_ALIGN_SZ 32
+#else
+	/* Avoid the Synopsys USB host receive buffer size limit */
+	#define RECVBUFF_ALIGN_SZ 4096
+#endif
 #else
 	#define RECVBUFF_ALIGN_SZ 8
 #endif
@@ -369,6 +376,9 @@ struct recv_priv {
 	_sema allrxreturnevt;
 	uint	ff_hwaddr;
 	ATOMIC_T	rx_pending_cnt;
+#ifdef CONFIG_USB_PROTECT_RX_CLONED_SKB
+	struct sk_buff_head rx_cloned_skb_queue;
+#endif
 
 #ifdef CONFIG_USB_INTERRUPT_IN_PIPE
 #ifdef PLATFORM_LINUX

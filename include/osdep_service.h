@@ -26,7 +26,7 @@
 #define RTW_SDIO_READ_PORT_FAIL	7
 #define RTW_ALREADY				8
 #define RTW_RA_RESOLVING		9
-#define RTW_BMC_NO_NEED			10
+#define RTW_ORI_NO_NEED			10
 #define RTW_XBUF_UNAVAIL		11
 #define RTW_TX_BALANCE			12
 #define RTW_TX_WAIT_MORE_FRAME	13
@@ -47,6 +47,9 @@
 
 #ifdef PLATFORM_LINUX
 	#include <linux/version.h>
+#if defined(CONFIG_RTW_ANDROID_GKI)
+	#include <linux/firmware.h>
+#endif
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0))
 	#include <linux/sched/signal.h>
 	#include <linux/sched/types.h>
@@ -483,7 +486,11 @@ static __inline void thread_enter(char *name)
 	printf("%s", "RTKTHREAD_enter");
 #endif
 }
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 17, 0)
 void thread_exit(_completion *comp);
+#else
+void kthread_thread_exit(_completion *comp);
+#endif
 void _rtw_init_completion(_completion *comp);
 void _rtw_wait_for_comp_timeout(_completion *comp);
 void _rtw_wait_for_comp(_completion *comp);
@@ -709,12 +716,14 @@ extern int ATOMIC_DEC_RETURN(ATOMIC_T *v);
 extern bool ATOMIC_INC_UNLESS(ATOMIC_T *v, int u);
 
 /* File operation APIs, just for linux now */
+#if !defined(CONFIG_RTW_ANDROID_GKI)
 extern int rtw_is_dir_readable(const char *path);
+extern int rtw_store_to_file(const char *path, u8 *buf, u32 sz);
+#endif /* !defined(CONFIG_RTW_ANDROID_GKI) */
 extern int rtw_is_file_readable(const char *path);
 extern int rtw_is_file_readable_with_size(const char *path, u32 *sz);
 extern int rtw_readable_file_sz_chk(const char *path, u32 sz);
 extern int rtw_retrieve_from_file(const char *path, u8 *buf, u32 sz);
-extern int rtw_store_to_file(const char *path, u8 *buf, u32 sz);
 
 
 #ifndef PLATFORM_FREEBSD

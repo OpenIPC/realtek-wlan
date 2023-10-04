@@ -938,6 +938,11 @@ config_phydm_switch_band_8733b(struct dm_struct *dm, u8 central_ch)
 			odm_set_bb_reg(dm, R_0x1884, BIT(21), 0x0);
 			odm_set_bb_reg(dm, R_0x1884, BIT(20), 0x0);
 		}
+
+		/* for BTTX*/
+		odm_set_bb_reg(dm, R_0x1968, BIT(0), 0x1);
+		odm_set_bb_reg(dm, R_0x1968, BIT(8), 0x1);
+		odm_set_bb_reg(dm, R_0x1968, BIT(14), 0x1);
 	} else if (central_ch > 35) {
 		/* 5G */
 		/* @Enable CCK TRx */
@@ -965,13 +970,18 @@ config_phydm_switch_band_8733b(struct dm_struct *dm, u8 central_ch)
 			  	dm->rfe_type);
 			return false;
 		}
+
+		/* for BTTX*/
+		odm_set_bb_reg(dm, R_0x1968, BIT(0), 0x0);
+		odm_set_bb_reg(dm, R_0x1968, BIT(8), 0x0);
+		odm_set_bb_reg(dm, R_0x1968, BIT(14), 0x0);
 	} else {
 		PHYDM_DBG(dm, ODM_PHY_CONFIG, "Fail to switch band (ch: %d)\n",
 			  central_ch);
 		return false;
 	}
 	if (dm->cut_version < ODM_CUT_D) {
-		for (i = 0; i < 5; i++) {
+		for (i = 0; i < 20; i++) {
 			/*write RF-0x18*/
 			odm_set_rf_reg(dm, RF_PATH_A, RF_0x18, RFREG_MASK, rf_reg18);
 			odm_set_rf_reg(dm, RF_PATH_B, RF_0x18, RFREG_MASK, rf_reg18);
@@ -983,9 +993,13 @@ config_phydm_switch_band_8733b(struct dm_struct *dm, u8 central_ch)
 				break;
 		}
 	} else {
-		/*write RF-0x18*/
-		odm_set_rf_reg(dm, RF_PATH_A, RF_0x18, RFREG_MASK, rf_reg18);
-		odm_set_rf_reg(dm, RF_PATH_B, RF_0x18, RFREG_MASK, rf_reg18);
+		for (i = 0; i < 20; i++) {
+			odm_set_rf_reg(dm, RF_PATH_A, RF_0x18, RFREG_MASK, rf_reg18);
+			odm_set_rf_reg(dm, RF_PATH_B, RF_0x18, RFREG_MASK, rf_reg18);
+			ODM_delay_us(250);
+			if(odm_get_rf_reg(dm, RF_PATH_A, 0xc5, 0x8000))
+				break;
+		}
 	}
 	PHYDM_DBG(dm, ODM_PHY_CONFIG, "Success to switch band (ch: %d)\n",
 		  central_ch);
@@ -1076,6 +1090,21 @@ phydm_sco_trk_fc_setting_8733b(struct dm_struct *dm, u8 central_ch)
 }
 
 __odm_func__
+void
+phydm_tx_dfir_setting_8733b(struct dm_struct *dm, u8 central_ch)
+{
+	/* TX band edge improvement */
+	if (central_ch <= 14) {
+		if (central_ch == 13)
+			odm_set_bb_reg(dm, R_0x808, 0x7f, 0x30);
+		else
+			odm_set_bb_reg(dm, R_0x808, 0x7f, 0x40);
+	} else {
+		odm_set_bb_reg(dm, R_0x808, 0x7f, 0x40);
+	}
+}
+
+__odm_func__
 boolean
 config_phydm_switch_channel_8733b(struct dm_struct *dm, u8 central_ch)
 {
@@ -1140,7 +1169,7 @@ config_phydm_switch_channel_8733b(struct dm_struct *dm, u8 central_ch)
 			rf_reg19 |= BIT(18);
 		}
 	if (dm->cut_version < ODM_CUT_D) {
-		for (i = 0; i < 5; i++) {
+		for (i = 0; i < 20; i++) {
 			/*write RF-0x18*/
 			odm_set_rf_reg(dm, RF_PATH_A, RF_0x18, RFREG_MASK, rf_reg18);
 			odm_set_rf_reg(dm, RF_PATH_B, RF_0x18, RFREG_MASK, rf_reg18);
@@ -1152,27 +1181,41 @@ config_phydm_switch_channel_8733b(struct dm_struct *dm, u8 central_ch)
 				break;
 		}
 	} else {
-		/*write RF-0x18*/
-		odm_set_rf_reg(dm, RF_PATH_A, RF_0x18, RFREG_MASK, rf_reg18);
-		odm_set_rf_reg(dm, RF_PATH_B, RF_0x18, RFREG_MASK, rf_reg18);
+		for (i = 0; i < 20; i++) {
+			odm_set_rf_reg(dm, RF_PATH_A, RF_0x18, RFREG_MASK, rf_reg18);
+			odm_set_rf_reg(dm, RF_PATH_B, RF_0x18, RFREG_MASK, rf_reg18);
+			ODM_delay_us(250);
+			if(odm_get_rf_reg(dm, RF_PATH_A, 0xc5, 0x8000))
+				break;
+		}
 	}
 	/*write RF-0x19*/
 	odm_set_rf_reg(dm, RF_PATH_A, RF_0x19, RFREG_MASK, rf_reg19);
 	odm_set_rf_reg(dm, RF_PATH_B, RF_0x19, RFREG_MASK, rf_reg19);
 	/* @2. AGC table selection */
 	if (central_ch <= 14) {
+		/* RX idle agc table 12 */
+		odm_set_bb_reg(dm, R_0x1ea8, BIT(7), 0x1);
+		/* RX cck agc table 5*/
+		phydm_cck_agc_tab_sel_8733b(dm, CCK_BW20_40_8733B);
 		if (*dm->band_width == CHANNEL_WIDTH_20) {
-			phydm_cck_agc_tab_sel_8733b(dm, CCK_BW20_8733B);
-			phydm_ofdm_agc_tab_sel_8733b(dm, OFDM_2G_BW20_8733B);
+		/* ofdm 20M agc table 4 */
+			phydm_ofdm_agc_tab_sel_8733b(dm, OFDM_2G_BW20_40_8733B);
 		} else {
-			phydm_cck_agc_tab_sel_8733b(dm, CCK_BW40_8733B);
-			phydm_ofdm_agc_tab_sel_8733b(dm, OFDM_2G_BW40_8733B);
+		/* ofdm 40M agc table 4 */
+			phydm_ofdm_agc_tab_sel_8733b(dm, OFDM_2G_BW20_40_8733B);
 		}
 	} else if (central_ch >= 36 && central_ch <= 64) {
+		/* 5G RX idle agc table = low band table = 1 */
+		odm_set_bb_reg(dm, R_0x1ea8, BIT(7), 0x0);
 		phydm_ofdm_agc_tab_sel_8733b(dm, OFDM_5G_LOW_BAND_8733B);
 	} else if ((central_ch >= 100) && (central_ch <= 144)) {
+		/* 5G RX idle agc table = low band table = 2 */
+		odm_set_bb_reg(dm, R_0x1ea8, BIT(7), 0x0);
 		phydm_ofdm_agc_tab_sel_8733b(dm, OFDM_5G_MID_BAND_8733B);
 	} else if (central_ch >= 149) {
+		/* 5G RX idle agc table = low band table = 3 */
+		odm_set_bb_reg(dm, R_0x1ea8, BIT(7), 0x0);
 		phydm_ofdm_agc_tab_sel_8733b(dm, OFDM_5G_HIGH_BAND_8733B);
 	}
 
@@ -1181,9 +1224,13 @@ config_phydm_switch_channel_8733b(struct dm_struct *dm, u8 central_ch)
 	/* 4. Other 2.4G tx_shaping_fliter Settings*/
 		if (is_2g_ch)
 		phydm_cck_tx_shaping_filter_8733b(dm, central_ch);
-
+	/* 5. TX DFIR*/
+	phydm_tx_dfir_setting_8733b(dm, central_ch);
 	phydm_bb_reset_8733b(dm);
 	phydm_igi_toggle_8733b(dm);
+
+	phydm_spur_cancellation_8733b(dm);
+
 	PHYDM_DBG(dm, ODM_PHY_CONFIG, "Success to switch channel : %d\n",central_ch);
 	return true;
 }
@@ -1241,6 +1288,9 @@ config_phydm_switch_bandwidth_8733b(struct dm_struct *dm, u8 pri_ch,
 
 			/* @ADC clock = 40M clock for BW5 */
 			odm_set_bb_reg(dm, R_0x9f0, 0xf, 0xa);
+
+			/* TX BPSK/QPSK BandEdge configure */
+			odm_set_bb_reg(dm, R_0x81c, 0xf, 0x0);
 		} else if (bw == CHANNEL_WIDTH_10) {
 			/* @RX DFIR*/
 			odm_set_bb_reg(dm, R_0x810, 0x3ff0, 0x19b);
@@ -1254,6 +1304,9 @@ config_phydm_switch_bandwidth_8733b(struct dm_struct *dm, u8 pri_ch,
 
 			/* @ADC clock = 80M clock for BW10 */
 			odm_set_bb_reg(dm, R_0x9f0, 0xf, 0xb);
+
+			/* TX BPSK/QPSK BandEdge configure */
+			odm_set_bb_reg(dm, R_0x81c, 0xf, 0x0);
 		} else if (bw == CHANNEL_WIDTH_20) {
 			/* @RX DFIR*/
 			odm_set_bb_reg(dm, R_0x810, 0x3ff0, 0x19b);
@@ -1267,6 +1320,9 @@ config_phydm_switch_bandwidth_8733b(struct dm_struct *dm, u8 pri_ch,
 
 			/* @ADC clock = 160M clock for BW20 */
 			odm_set_bb_reg(dm, R_0x9f0, 0xf, 0xc);
+
+			/* TX BPSK/QPSK BandEdge configure for SRRC */
+			odm_set_bb_reg(dm, R_0x81c, 0xf, 0x9);
 		}
 
 		/* @TX_RF_BW:[1:0]=0x0, RX_RF_BW:[3:2]=0x0 */
@@ -1276,19 +1332,16 @@ config_phydm_switch_bandwidth_8733b(struct dm_struct *dm, u8 pri_ch,
 		rf_reg18 |= (BIT(11) | BIT(10));
 
 		/* @RF RXBB setting*/
-		
+
 		/* @pilot smoothing on */
 		odm_set_bb_reg(dm, R_0xcbc, BIT(21), 0x0);
-		
+
 		if (*dm->band_type == ODM_BAND_2_4G) {
 			/* @CCK*/
-			phydm_cck_agc_tab_sel_8733b(dm, CCK_BW20_8733B);
+			phydm_cck_agc_tab_sel_8733b(dm, CCK_BW20_40_8733B);
 			/* @OFDM*/
-			phydm_ofdm_agc_tab_sel_8733b(dm, OFDM_2G_BW20_8733B);
+			phydm_ofdm_agc_tab_sel_8733b(dm, OFDM_2G_BW20_40_8733B);
 		}
-
-		/* TX band edge improvement */
-		odm_set_bb_reg(dm, R_0x808, 0xff, 0x40);
 
 		break;
 	case CHANNEL_WIDTH_40:
@@ -1314,16 +1367,18 @@ config_phydm_switch_bandwidth_8733b(struct dm_struct *dm, u8 pri_ch,
 
 		/* @pilot smoothing off */
 		odm_set_bb_reg(dm, R_0xcbc, BIT(21), 0x1);
-		
+
 		if (*dm->band_type == ODM_BAND_2_4G) {
 			/*CCK*/
-			phydm_cck_agc_tab_sel_8733b(dm, CCK_BW40_8733B);
+			phydm_cck_agc_tab_sel_8733b(dm, CCK_BW20_40_8733B);
 			/* @OFDM*/
-			phydm_ofdm_agc_tab_sel_8733b(dm, OFDM_2G_BW40_8733B);
+			phydm_ofdm_agc_tab_sel_8733b(dm, OFDM_2G_BW20_40_8733B);
 		}
 
 		/* TX band edge improvement by Anchi */
 		odm_set_bb_reg(dm, R_0x808, 0x000f0000, 0xd);
+		/* TX BPSK/QPSK BandEdge configure for SRRC */
+		odm_set_bb_reg(dm, R_0x81c, 0xf, 0x9);
 
 		break;
 	default:
@@ -1344,7 +1399,7 @@ config_phydm_switch_bandwidth_8733b(struct dm_struct *dm, u8 pri_ch,
 	odm_set_rf_reg(dm, RF_PATH_B, RF_0xee, 0x4, 0x0);
 	#endif
 	if (dm->cut_version < ODM_CUT_D) {
-		for (i = 0; i < 5; i++) {
+		for (i = 0; i < 20; i++) {
 			/*write RF-0x18*/
 			odm_set_rf_reg(dm, RF_PATH_A, RF_0x18, RFREG_MASK, rf_reg18);
 			odm_set_rf_reg(dm, RF_PATH_B, RF_0x18, RFREG_MASK, rf_reg18);
@@ -1356,16 +1411,34 @@ config_phydm_switch_bandwidth_8733b(struct dm_struct *dm, u8 pri_ch,
 				break;
 		}
 	} else {
-		/*write RF-0x18*/
-		odm_set_rf_reg(dm, RF_PATH_A, RF_0x18, RFREG_MASK, rf_reg18);
-		odm_set_rf_reg(dm, RF_PATH_B, RF_0x18, RFREG_MASK, rf_reg18);
+		for (i = 0; i < 20; i++) {
+			odm_set_rf_reg(dm, RF_PATH_A, RF_0x18, RFREG_MASK, rf_reg18);
+			odm_set_rf_reg(dm, RF_PATH_B, RF_0x18, RFREG_MASK, rf_reg18);
+			ODM_delay_us(250);
+			if(odm_get_rf_reg(dm, RF_PATH_A, 0xc5, 0x8000))
+				break;
+		}
 	}
+	/*TX_CCK_IND_int*/
+	if (bw == CHANNEL_WIDTH_40) {
+		odm_set_rf_reg(dm, RF_PATH_A, RF_0x1a, BIT(0), 0x1);
+		odm_set_rf_reg(dm, RF_PATH_B, RF_0x1a, BIT(0), 0x1);
+		odm_set_rf_reg(dm, RF_PATH_A, RF_0x1a, BIT(16), 0x0);
+		odm_set_rf_reg(dm, RF_PATH_B, RF_0x1a, BIT(16), 0x0);
+	} else {
+		odm_set_rf_reg(dm, RF_PATH_A, RF_0x1a, BIT(0), 0x0);
+		odm_set_rf_reg(dm, RF_PATH_B, RF_0x1a, BIT(0), 0x0);
+	}
+	
 	if (!rf_reg_status) {
 		PHYDM_DBG(dm, ODM_PHY_CONFIG,
 			  "Fail to switch bw (bw:%d, primary ch:%d), because writing RF register is fail\n",
 			  bw, pri_ch);
 		return false;
 	}
+
+
+	phydm_spur_cancellation_8733b(dm);
 
 	PHYDM_DBG(dm, ODM_PHY_CONFIG,
 		  "Success to switch bw (bw:%d, pri ch:%d)\n", bw, pri_ch);
@@ -1396,6 +1469,92 @@ config_phydm_switch_channel_bw_8733b(struct dm_struct *dm, u8 central_ch,
 
 	return true;
 }
+__odm_func__
+void phydm_spur_cancellation_8733b(struct dm_struct *dm) {
+	odm_set_bb_reg(dm, R_0x818, BIT(11), 0);
+	odm_set_bb_reg(dm, R_0x1940, BIT(31), 0);
+	odm_set_bb_reg(dm, R_0x1ce8, BIT(28), 0);
+	odm_set_bb_reg(dm, R_0xdb4, BIT(0), 0);
+	odm_set_bb_reg(dm, R_0xc10, BIT(9), 0);
+	odm_set_bb_reg(dm, R_0xc24, 0xFF, 0xFF);
+	odm_set_bb_reg(dm, R_0xc24, 0xFF00,0x0);
+	odm_set_bb_reg(dm, R_0x884, 0x1C000,0x4);
+	odm_set_bb_reg(dm, R_0x1900, 0xF, 6);
+	odm_set_bb_reg(dm, R_0x1908, 0xF0, 9);
+	if(*dm->mp_mode == 1) {
+		if ( (*dm->channel == 54) ||(*dm->channel == 118)
+			|| (*dm->channel == 151) || (*dm->channel == 153) )
+			phydm_spur_eliminate_8733b(dm);
+	}
+}
+
+__odm_func__
+void phydm_spur_eliminate_8733b(
+	struct dm_struct *dm)
+{
+
+	s32 tone_idx[3] = {0x20, 0x10, 0x70};//Spur location
+	if (*dm->band_width == CHANNEL_WIDTH_40) {
+		if ( (*dm->channel == 54) ||(*dm->channel == 118) ) {
+				odm_set_bb_reg(dm, R_0xdb4, 0xFE, tone_idx[0]);
+				odm_set_bb_reg(dm, R_0xdb0, MASKDWORD, 0x33221100);
+				odm_set_bb_reg(dm, R_0xdb4, BIT(0), 1);
+
+				odm_set_bb_reg(dm, R_0xc10, BIT(9), 1);
+				odm_set_bb_reg(dm, R_0xc10, 0x3FC00, tone_idx[0]);
+
+				odm_set_bb_reg(dm, R_0xc24, 0xFF, 0xFE);
+				odm_set_bb_reg(dm, R_0xc24, 0xFF00, tone_idx[0]);
+				//modify 0x1900
+				odm_set_bb_reg(dm, R_0x1900, 0xF, 7);
+		}
+		else if (*dm->channel == 151) {
+				odm_set_bb_reg(dm, R_0x1944, 0x001FF000, tone_idx[1]);
+				odm_set_bb_reg(dm, R_0x818, BIT(11), 0);
+				odm_set_bb_reg(dm, R_0x818, BIT(11), 1);
+				odm_set_bb_reg(dm, R_0x1940, BIT(31), 0);
+				odm_set_bb_reg(dm, R_0x1940, BIT(31), 1);
+				odm_set_bb_reg(dm, R_0x1ce8, BIT(28), 0);
+				odm_set_bb_reg(dm, R_0x1ce8, BIT(28), 1);
+
+				odm_set_bb_reg(dm, R_0xdb4, 0xFE, tone_idx[1]);
+				odm_set_bb_reg(dm, R_0xdb0, MASKDWORD, 0x33221100);
+				odm_set_bb_reg(dm, R_0xdb4, BIT(0), 1);
+
+				odm_set_bb_reg(dm, R_0xc10, BIT(9), 1);
+				odm_set_bb_reg(dm, R_0xc10, 0x3FC00, tone_idx[1]);
+
+				odm_set_bb_reg(dm, R_0xc24, 0xFF, 0xFE);
+				odm_set_bb_reg(dm, R_0xc24, 0xFF00, tone_idx[1]);
+
+				odm_set_bb_reg(dm, R_0x884, 0x1C000,0x2);
+				//modify 0x1900
+				odm_set_bb_reg(dm, R_0x1900, 0xF, 7);
+				odm_set_bb_reg(dm, R_0x1908, 0xF0, 0xA);
+		}
+	}else if (*dm->band_width == CHANNEL_WIDTH_20) {
+		if (*dm->channel == 153) {
+			odm_set_bb_reg(dm, R_0x1944, 0x001FF000, tone_idx[2]);
+			odm_set_bb_reg(dm, R_0x818, BIT(11), 0);
+			odm_set_bb_reg(dm, R_0x818, BIT(11), 1);
+			odm_set_bb_reg(dm, R_0x1940, BIT(31), 0);
+			odm_set_bb_reg(dm, R_0x1940, BIT(31), 1);
+			odm_set_bb_reg(dm, R_0x1ce8, BIT(28), 0);
+			odm_set_bb_reg(dm, R_0x1ce8, BIT(28), 1);
+
+			odm_set_bb_reg(dm, R_0xdb4, 0xFE, tone_idx[2]);
+			odm_set_bb_reg(dm, R_0xdb0, MASKDWORD, 0x33221100);
+			odm_set_bb_reg(dm, R_0xdb4, BIT(0), 1);
+
+			odm_set_bb_reg(dm, R_0xc10, BIT(9), 1);
+			odm_set_bb_reg(dm, R_0xc10, 0x3FC00, tone_idx[2]);
+
+			odm_set_bb_reg(dm, R_0xc24, 0xFF, 0xFE);
+			odm_set_bb_reg(dm, R_0xc24, 0xFF00, tone_idx[2]);
+		}
+	}
+}
+
 
 __odm_func__
 void phydm_i_only_setting_8733b(struct dm_struct *dm, boolean en_i_only,

@@ -180,7 +180,7 @@ void hal_mpt_CCKTxPowerAdjust(PADAPTER Adapter, BOOLEAN bInCH14)
 	} else if (IS_HARDWARE_TYPE_8723D(Adapter)) {
 		/* 2.4G CCK TX DFIR */
 		/* 2016.01.20 Suggest from RS BB mingzhi*/
-		if ((u1Channel == 14)) {
+		if (u1Channel == 14) {
 			phy_set_bb_reg(Adapter, rCCK0_TxFilter2, bMaskDWord, 0x0000B81C);
 			phy_set_bb_reg(Adapter, rCCK0_DebugPort, bMaskDWord, 0x00000000);
 			phy_set_bb_reg(Adapter, 0xAAC, bMaskDWord, 0x00003667);
@@ -600,6 +600,33 @@ void hal_mpt_SetDataRate(PADAPTER pAdapter)
 			phy_set_rf_reg(pAdapter, RF_PATH_A, 0x71, 0xF, 0xE);
 	}
 #endif
+}
+
+u32 hal_mpt_tssi_turn_target_power(PADAPTER padapter, s16 power_offset, u8 path)
+{
+	HAL_DATA_TYPE	*pHalData = GET_HAL_DATA(padapter);
+	struct dm_struct	*pdm = &pHalData->odmpriv;
+	u32 pout = 0;
+
+#ifdef CONFIG_RTL8733B
+	pout = halrf_tssi_turn_target_power(pdm, power_offset, path);
+#endif
+	RTW_INFO("%s()===> pout %d\n", __func__, pout);
+
+	return pout;
+}
+
+void hal_mpt_tssi_set_power_offset(PADAPTER padapter, s16 power_offset, u8 path)
+{
+	HAL_DATA_TYPE	*pHalData = GET_HAL_DATA(padapter);
+	struct dm_struct	*pdm = &pHalData->odmpriv;
+
+#ifdef CONFIG_RTL8733B
+	halrf_tssi_set_power_offset(pdm, power_offset, path);
+#endif
+	RTW_INFO("%s()===>  path%d = %d\n", __func__, path, power_offset);
+
+	return;
 }
 
 #define RF_PATH_AB	22
@@ -1578,6 +1605,12 @@ void hal_mpt_SetAntenna(PADAPTER	pAdapter)
 	tx_path_nss_set_full_tx(hal->txpath_nss, hal->txpath_num_nss, bb_tx);
 	RTW_INFO("%s ,ant idx %d, tx path_num_nss = %d\n", __func__, anttx, hal->txpath_num_nss[0]);
 
+#ifdef CONFIG_RTL8733B
+		if (IS_HARDWARE_TYPE_8733B(pAdapter)) {
+			rtl8733b_mp_config_rfpath(pAdapter);
+			return;
+		}
+#endif
 #ifdef CONFIG_RTL8822C
 	if (IS_HARDWARE_TYPE_8822C(pAdapter)) {
 		rtl8822c_mp_config_rfpath(pAdapter);
@@ -2416,13 +2449,26 @@ u8 mpt_ProSetPMacTx(PADAPTER	Adapter)
 		if (PMacTxInfo.bEnPMacTx == TRUE) {
 			pMptCtx->HWTxmode = PMacTxInfo.Mode;
 			pMptCtx->mpt_rate_index = PMacTxInfo.TX_RATE;
-			if (PMacTxInfo.Mode == CONTINUOUS_TX)
+			if (PMacTxInfo.Mode != PACKETS_TX) 
 				hal_mpt_SetTxPower(Adapter);
 		} else {
 			PMacTxInfo.Mode = pMptCtx->HWTxmode;
 			PMacTxInfo.TX_RATE = pMptCtx->mpt_rate_index;
 			pMptCtx->HWTxmode = TEST_NONE;
 		}
+		if (PMacTxInfo.Mode == OFDM_Single_Tone_TX) {
+			phydm_mp_set_single_tone(p_dm_odm, PMacTxInfo.bEnPMacTx ,pMptCtx->mpt_rf_path);
+			RTW_INFO("To set Tx mode OFDM_Single_Tone_TX\n");
+			return status;
+		}
+
+		if (PMacTxInfo.Mode == CCK_Carrier_Suppression_TX) {
+			phydm_mp_set_carrier_supp(p_dm_odm, PMacTxInfo.bEnPMacTx ,PMacTxInfo.TX_RATE);
+			
+			RTW_INFO("To set Tx mode CCK_Carrier_Suppression_TX\n");
+			return status;
+		}
+
 		mpt_convert_phydm_txinfo_for_jaguar3(&PMacTxInfo, &phydm_mactxinfo);
 		phydm_set_pmac_tx(p_dm_odm, &phydm_mactxinfo, pMptCtx->mpt_rf_path);
 #endif
@@ -2653,5 +2699,12 @@ void mpt_trigger_tssi_tracking(PADAPTER pAdapter, u8 rf_path)
 	halrf_do_tssi_8814b(pDM_Odm, rf_path);
 #endif
 }
+
+#ifdef RTW_HALMAC
+int hal_mpt_SetGpio(PADAPTER pAdapter, u8 gpio_id, u8 gpio_enable, u8 gpio_func_offset, u8 gpio_mode)
+{
+	return rtw_halmac_set_gpio(adapter_to_dvobj(pAdapter), gpio_id, gpio_enable, gpio_func_offset, gpio_mode);
+}
+#endif
 
 #endif /* CONFIG_MP_INCLUDE*/

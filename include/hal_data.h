@@ -876,6 +876,9 @@ typedef struct hal_com_data HAL_DATA_TYPE, *PHAL_DATA_TYPE;
 
 #ifdef RTW_HALMAC
 int rtw_halmac_deinit_adapter(struct dvobj_priv *);
+#ifdef CONFIG_MP_INCLUDED
+int rtw_halmac_set_gpio(struct dvobj_priv *d, u8 gpio_id, u8 gpio_enable, u8 gpio_func_offset, u8 gpio_mode);
+#endif
 #endif /* RTW_HALMAC */
 
 #endif /* __HAL_DATA_H__ */

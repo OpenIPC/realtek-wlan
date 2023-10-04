@@ -23,7 +23,7 @@
  *
  *****************************************************************************/
 
-/*Image2HeaderVersion: R3 1.5.11*/
+/*Image2HeaderVersion: R3 1.5.10.1*/
 #if (RTL8733B_SUPPORT == 1)
 #ifndef __INC_MP_RF_HW_IMG_8733B_H
 #define __INC_MP_RF_HW_IMG_8733B_H
@@ -43,6 +43,16 @@
 #ifdef CONFIG_8733BTSSI_DRV_DIS
     #undef CONFIG_8733BTSSI
 #endif
+
+struct txpwr_lmt_t_8733b {
+	u8			reg;
+	u8			band:1;
+	u8			bw:3;
+	u8			rs:2;
+	u8			ntx:2;
+	u8			ch;
+	s8			val;
+};
 
 /******************************************************************************
  *                           radioa.TXT

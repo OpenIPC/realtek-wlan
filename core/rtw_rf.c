@@ -1033,6 +1033,41 @@ exit:
 	return valid;
 }
 
+#ifdef CONFIG_ECSA
+int get_supported_op_class(_adapter *padapter, u8 *op_set, int len)
+{
+	struct registry_priv *regsty = adapter_to_regsty(padapter);
+	struct mlme_ext_priv *pmlmeext = &(padapter->mlmeextpriv);
+	struct rf_ctl_t *rfctl = adapter_to_rfctl(padapter);
+	RT_CHANNEL_INFO *ch_set = rfctl->channel_set;
+	int match, i = 0, j, k = 0;
+	const struct op_class_t *cl;
+	u8 cur_op_class;
+	u8 *ch;
+
+	cur_op_class = rtw_get_op_class_by_chbw(pmlmeext->cur_channel,
+						pmlmeext->cur_bwmode,
+						pmlmeext->cur_ch_offset);
+	if (cur_op_class && k < len) {
+		/* current op class SHALL be the 1st supported op class */
+		*op_set = cur_op_class;
+		k++;
+	}
+
+	for (i = 0; i < global_op_class_num; i++) {
+		cl = &global_op_class[i];
+
+		ch = cl->len_ch_attr;
+		for (j = 0; j < ch[0]; j++)
+			if ((match = rtw_chset_search_ch(ch_set, ch[j+1])) == -1)
+				break; /* for() */
+		if (match != -1 && cl->class_id != cur_op_class && k < len)
+			op_set[k++] = cl->class_id;
+	}
+	return (k > len ? len : k);
+}
+#endif /* CONFIG_ECSA */
+
 static struct op_class_pref_t *opc_pref_alloc(u8 class_id)
 {
 	int i, j;

@@ -384,7 +384,9 @@ struct registry_priv {
 
 	u8 ifname[16];
 	u8 if2name[16];
-
+#if defined(CONFIG_PLATFORM_ANDROID) && (CONFIG_IFACE_NUMBER > 2)
+	u8 if3name[16];
+#endif
 	u8 notch_filter;
 
 	/* for pll reference clock selction */
@@ -558,6 +560,9 @@ struct registry_priv {
 #ifdef CONFIG_RTW_MULTI_AP
 	u8 unassoc_sta_mode_of_stype[UNASOC_STA_SRC_NUM];
 	u16 max_unassoc_sta_cnt;
+#endif
+#if defined(CONFIG_CONCURRENT_MODE) && defined(CONFIG_AP_MODE)
+	u8 ap_csa_cnt;
 #endif
 };
 
@@ -781,6 +786,20 @@ struct int_logs {
 
 #endif /* CONFIG_DBG_COUNTER */
 
+#ifdef RTW_DETECT_HANG
+struct bb_hang_info {
+	u8 rxff_hang_cnt;
+	u8 is_rxff_hang;
+	u32 last_rxff_cnt;
+	u32 last_rxff_cnt_r;
+	u32 last_rxff_cnt_w;
+};
+
+struct hang_info {
+	struct bb_hang_info dbg_bb_hang_info;
+};
+#endif /* RTW_DETECT_HANG */
+
 struct debug_priv {
 	u32 dbg_sdio_free_irq_error_cnt;
 	u32 dbg_sdio_alloc_irq_error_cnt;
@@ -815,6 +834,9 @@ struct debug_priv {
 	u64 dbg_rx_fifo_last_overflow;
 	u64 dbg_rx_fifo_curr_overflow;
 	u64 dbg_rx_fifo_diff_overflow;
+#ifdef RTW_DETECT_HANG
+	struct hang_info dbg_hang_info;
+#endif /* RTW_DETECT_HANG */
 };
 
 struct rtw_traffic_statistics {
@@ -1061,6 +1083,16 @@ struct rf_ctl_t {
 
 	bool ch_sel_within_same_band;
 
+	u8 ap_csa_ch;
+	u8 ap_csa_switch_cnt;
+	u8 ap_csa_ch_offset;
+	u8 ap_csa_ch_width;
+	u8 ap_csa_en;
+	u8 ap_csa_wait_update_bcn; /* wait beacon update */
+#if defined(CONFIG_CONCURRENT_MODE) && defined(CONFIG_AP_MODE)
+	u8 ap_csa_cnt_input; /* Input from proc, default value is DEFAULT_CSA_CNT */
+#endif
+
 #if CONFIG_DFS
 	u8 csa_ch;
 	u8 csa_switch_cnt;
@@ -1068,6 +1100,10 @@ struct rf_ctl_t {
 	u8 csa_ch_width;
 	u8 csa_ch_freq_seg0; /* Channel Center Frequency Segment 0 */
 	u8 csa_ch_freq_seg1; /* Channel Center Frequency Segment 1 */
+#ifdef CONFIG_ECSA
+	u8 ecsa_mode;
+	u8 ecsa_op_class;
+#endif
 
 #ifdef CONFIG_DFS_MASTER
 	u8 dfs_region_domain;
@@ -1103,6 +1139,10 @@ struct wow_ctl_t {
 
 #define WOW_CAP_TKIP_OL BIT0
 #define WOW_CAP_HALMAC_ACCESS_PATTERN_IN_TXFIFO BIT1
+#define WOW_CAP_CSA BIT2
+#define WOW_CAP_WPA3_SAE BIT3
+#define WOW_CAP_DIS_INBAND_SIGNAL BIT4
+
 
 #define RTW_CAC_STOPPED 0
 #ifdef CONFIG_DFS_MASTER
@@ -1465,6 +1505,12 @@ struct dvobj_priv {
 #if defined (CONFIG_CONCURRENT_MODE)  && defined (CONFIG_TSF_SYNC)
 	u16 sync_tsfr_counter;
 #endif
+
+	/* WPAS maintain from w1.fi */
+#define RTW_WPAS_W1FI		0x00
+	/* WPAS maintain from android */
+#define RTW_WPAS_ANDROID	0x01
+	u8 wpas_type;
 };
 
 #define DEV_STA_NUM(_dvobj)			MSTATE_STA_NUM(&((_dvobj)->iface_state))

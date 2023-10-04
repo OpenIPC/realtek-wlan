@@ -509,6 +509,7 @@ halmac_get_version(struct halmac_ver *version)
 	version->major_ver = (u8)HALMAC_MAJOR_VER;
 	version->prototype_ver = (u8)HALMAC_PROTOTYPE_VER;
 	version->minor_ver = (u8)HALMAC_MINOR_VER;
+	version->patch_ver = (u8)HALMAC_PATCH_VER;
 
 	return HALMAC_RET_SUCCESS;
 }

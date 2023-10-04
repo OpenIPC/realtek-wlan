@@ -39,13 +39,11 @@
 #define config_phydm_read_txagc_check_8733b(data) ((data) != INVALID_TXAGC_DATA)
 
 enum agc_tab_sel_8733b {
-	OFDM_2G_BW40_8733B		= 0,
-	OFDM_5G_LOW_BAND_8733B		= 1,
-	OFDM_5G_MID_BAND_8733B		= 2,
-	OFDM_5G_HIGH_BAND_8733B		= 3,
-	CCK_BW40_8733B			= 4,
-	CCK_BW20_8733B			= 5,
-	OFDM_2G_BW20_8733B		= 6
+	OFDM_5G_LOW_BAND_8733B		= 6,
+	OFDM_5G_MID_BAND_8733B		= 7,
+	OFDM_5G_HIGH_BAND_8733B		= 0,
+	OFDM_2G_BW20_40_8733B			= 4,
+	CCK_BW20_40_8733B			= 5,
 };
 
 struct txagc_table_8733b {
@@ -109,6 +107,8 @@ boolean config_phydm_switch_channel_bw_8733b(struct dm_struct *dm,
 					     u8 central_ch,
 					     u8 primary_ch_idx,
 					     enum channel_width bandwidth);
+void phydm_spur_eliminate_8733b(struct dm_struct *dm);
+void phydm_spur_cancellation_8733b(struct dm_struct *dm);
 
 void phydm_i_only_setting_8733b(struct dm_struct *dm, boolean en_i_only,
 				boolean en_before_cca);

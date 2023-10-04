@@ -3108,7 +3108,7 @@ static int _send_general_info(struct dvobj_priv *d)
 	case HALMAC_RET_NO_DLFW:
 		RTW_WARN("%s: halmac_send_general_info() fail because fw not dl!\n",
 			 __FUNCTION__);
-		/* fall through */
+		fallthrough;
 	default:
 		return -1;
 	}
@@ -5925,3 +5925,39 @@ int rtw_halmac_bf_cfg_mu_mimo(struct dvobj_priv *d, enum halmac_snd_role role,
 
 #endif /* RTW_BEAMFORMING_VERSION_2 */
 #endif /* CONFIG_BEAMFORMING */
+
+#ifdef CONFIG_MP_INCLUDED
+#ifdef RTW_HALMAC
+int rtw_halmac_set_gpio(struct dvobj_priv *d, u8 gpio_id, u8 gpio_enable, u8 gpio_func_offset, u8 gpio_mode)
+{
+	struct halmac_adapter *halmac;
+	struct halmac_api *api;
+	enum halmac_ret_status status;
+
+	halmac = dvobj_to_halmac(d);
+	api = HALMAC_GET_API(halmac);
+
+	status = api->halmac_pinmux_free_func(halmac, gpio_id + gpio_func_offset);
+	if (status != HALMAC_RET_SUCCESS) {
+		return -1;
+	}
+
+	status = api->halmac_pinmux_set_func(halmac, gpio_id + gpio_func_offset);
+	if (status != HALMAC_RET_SUCCESS) {
+		return -1;
+	}
+
+	status = api->halmac_pinmux_gpio_mode(halmac, gpio_id, gpio_mode);
+	if (status != HALMAC_RET_SUCCESS) {
+		return -1;
+	}
+
+	status = api->halmac_pinmux_gpio_output(halmac, gpio_id, gpio_enable);
+	if (status != HALMAC_RET_SUCCESS) {
+		return -1;
+	}
+
+	return 0;
+}
+#endif
+#endif

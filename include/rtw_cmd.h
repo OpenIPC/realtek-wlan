@@ -569,6 +569,10 @@ struct write_bcnlen_param {
 };
 #endif
 
+struct bcn_control_param {
+	u8 control; /* 0: stop beaon, 1: resume beacon */
+};
+
 #define GEN_CMD_CODE(cmd)	cmd ## _CMD_
 
 
@@ -689,6 +693,9 @@ u8 rtw_get_chplan_cmd(_adapter *adapter, int flags, struct get_chplan_resp **res
 
 extern u8 rtw_led_blink_cmd(_adapter *padapter, void *pLed);
 extern u8 rtw_set_csa_cmd(_adapter *adapter);
+extern u8 rtw_set_ap_csa_cmd(_adapter *adapter);
+u8 bcn_control_cmd(_adapter *adapter, u8 control);
+u8 rtw_csa_sta_update_cap_cmd(_adapter *adapter);
 extern u8 rtw_tdls_cmd(_adapter *padapter, u8 *addr, u8 option);
 
 u8 rtw_mp_cmd(_adapter *adapter, u8 mp_cmd_id, u8 flags);
@@ -790,6 +797,10 @@ enum rtw_cmd_id {
 	CMD_DO_IQK, /* 22 */
 	CMD_GET_CHANPLAN, /*23*/
 	CMD_WRITE_BCN_LEN, /*24 */
+	CMD_AP_CHANSWITCH, /* 25 AP switch channel */
+
+	CMD_BCN_CONTROL, /* 27, stop/resume beacon */
+	CMD_STA_CSA_UPDATE_CAP, /* 28, update capabilities of STA mode */
 	CMD_ID_MAX
 };
 

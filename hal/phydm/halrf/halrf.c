@@ -1417,9 +1417,11 @@ void halrf_watchdog(void *dm_void)
 #endif
 	halrf_dpk_track(dm);
 #if (RTL8733B_SUPPORT == 1)
-		halrf_xtal_thermal_track(dm);
+	if (dm->support_ic_type & ODM_RTL8733B){
+		//halrf_xtal_thermal_track(dm);
+		halrf_powertracking_thermal(dm);
+	}
 #endif
-
 }
 
 #if 0
@@ -1573,7 +1575,13 @@ void halrf_rf_k_connect_trigger(void *dm_void, boolean is_recovery,
 			*rf->is_carrier_suppresion))
 			return;
 	}
-
+#if (RTL8733B_SUPPORT == 1)
+	if(dm->support_ic_type == ODM_RTL8733B){
+		rf->reg1c68 = odm_get_bb_reg(dm,0x1c68,MASKDWORD);
+		rf->reg2a24 = odm_get_bb_reg(dm,0x2a24,MASKDWORD);
+		halrf_dis_cca_8733b(dm, true);
+	}
+#endif
 	/*[TX GAP K]*/
 	halrf_txgapk_trigger(dm);
 
@@ -1595,6 +1603,10 @@ void halrf_rf_k_connect_trigger(void *dm_void, boolean is_recovery,
 	halrf_spur_compensation(dm);
 
 	halrf_bbreset(dm);
+#if (RTL8733B_SUPPORT == 1)
+	if(dm->support_ic_type == ODM_RTL8733B)
+		halrf_dis_cca_8733b(dm, false);
+#endif
 }
 
 void config_halrf_path_adda_setting_trigger(void *dm_void)
@@ -3656,11 +3668,26 @@ u32 halrf_tssi_turn_target_power(void *dm_void, s16 power_offset, u8 path)
 	struct dm_struct *dm = (struct dm_struct *)dm_void;
 	u32 pout = 0;
 
+    if (dm->mp_mode) {
+        if (*dm->mp_mode) { 
 #if (RTL8733B_SUPPORT == 1)
 	if (dm->support_ic_type & ODM_RTL8733B)
 		pout = halrf_tssi_set_powerbyrate_pout_8733b(dm, power_offset, path);
 #endif
+            }
+        }
 	return pout;
+}
+
+void halrf_tssi_set_power_offset(void *dm_void, s16 power_offset, u8 path)
+{
+	struct dm_struct *dm = (struct dm_struct *)dm_void;
+
+#if (RTL8733B_SUPPORT == 1)
+	if (dm->support_ic_type & ODM_RTL8733B)
+		 _halrf_tssi_set_powerlevel_8733b(dm, power_offset, path);
+#endif
+
 }
 
 u32 halrf_query_tssi_value(void *dm_void)
@@ -3966,6 +3993,175 @@ void halrf_txgap_enable_disable(void *dm_void, u8 enable)
 }
 
 #if (RTL8733B_SUPPORT == 1)
+s8 _halrf_get_power_offset_by_thermal_8733b(void *dm_void, u8 path, s8 thermal_detla)
+{
+	struct dm_struct *dm = (struct dm_struct *)dm_void;
+	struct dm_rf_calibration_struct *cali_info = &dm->rf_calibrate_info;
+	u8 channel = *dm->channel;
+	u8 tx_rate = phydm_get_tx_rate(dm);
+	s8 power_offset = 0;
+	u8 i = 0;
+	u8 thermal_up_a[DELTA_SWINGIDX_SIZE] = {0}, thermal_down_a[DELTA_SWINGIDX_SIZE] = {0};
+	u8 thermal_up_b[DELTA_SWINGIDX_SIZE] = {0}, thermal_down_b[DELTA_SWINGIDX_SIZE] = {0};
+	u8 txagc_offset_2g_cck_a_p[] = {
+		0, 0, 0, 1, 1, 2, 2, 2, 3, 3, 4, 4, 4, 5, 5, 5,
+		 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6};
+	u8 txagc_offset_2g_cck_a_n[] = {
+		0, 0, 0, 1, 1, 2, 2, 2, 3, 3, 4, 4, 4, 5, 5, 5,
+		 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6};
+	u8 txagc_offset_2g_cck_b_p[] = {
+		0, 0, 0, 1, 1, 2, 2, 2, 3, 3, 4, 4, 4, 5, 5,
+		 5, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6};
+	u8 txagc_offset_2g_cck_b_n[] = {
+		0, 0, 0, 1, 1, 2, 2, 2, 3, 3, 4, 4, 4, 5,
+		 5, 5, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6};
+	u8 txagc_offset_2ga_p[] = {
+		0, 0, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 5, 5, 6,
+		 6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7};
+	u8 txagc_offset_2ga_n[] = {
+		0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4,
+		 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6};
+	u8 txagc_offset_2gb_p[] = {
+		0, 0, 1, 1, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 5,
+		 5, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7};
+	u8 txagc_offset_2gb_n[] = {
+		0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3, 4, 4, 4,
+		 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6};
+	u8 txagc_offset_5ga_n[][30] = {
+		{0, 0, 2, 2, 2, 2, 3, 3, 4, 4, 4, 4, 5, 5, 5, 6, 6,
+			6, 7, 7, 7, 7, 7, 8, 8, 8, 8, 8, 8, 8},
+		{0, 0, 2, 2, 2, 2, 3, 3, 4, 4, 4, 4, 5, 5, 5, 6, 6,
+			6, 7, 7, 7, 7, 7, 8, 8, 8, 8, 8, 8, 8},
+		{0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 4, 4, 5, 5, 5, 6, 6,
+			6, 7, 7, 7, 7, 7, 8, 8, 8, 8, 8, 8, 8},
+	};
+	u8 txagc_offset_5ga_p[][30] = {
+		{0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 4, 4, 6, 6, 6, 6, 8,
+			8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8},
+		{0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 4, 4, 6, 6, 6, 6, 8,
+			8, 8, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9},
+		{0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 6, 6, 6, 6, 7, 7, 8,
+			8, 8, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9},
+	};
+	RF_DBG(dm, DBG_RF_TX_PWR_TRACK,"[RF][TSSI] ======>%s\n", __func__);
+
+	if (channel >= 1 && channel <= 14) {
+		if (IS_CCK_RATE(tx_rate)) {
+			odm_move_memory(dm, thermal_up_a, txagc_offset_2g_cck_a_p, sizeof(thermal_up_a));
+			odm_move_memory(dm, thermal_down_a, txagc_offset_2g_cck_a_n, sizeof(thermal_down_a));
+			odm_move_memory(dm, thermal_up_b, txagc_offset_2g_cck_b_p, sizeof(thermal_up_b));
+			odm_move_memory(dm, thermal_down_b, txagc_offset_2g_cck_b_n, sizeof(thermal_down_b));
+		} else {
+			odm_move_memory(dm, thermal_up_a, txagc_offset_2ga_p, sizeof(thermal_up_a));
+			odm_move_memory(dm, thermal_down_a, txagc_offset_2ga_n, sizeof(thermal_down_a));
+			odm_move_memory(dm, thermal_up_b, txagc_offset_2gb_p, sizeof(thermal_up_b));
+			odm_move_memory(dm, thermal_down_b, txagc_offset_2gb_n, sizeof(thermal_down_b));
+		}
+	}
+
+	if (channel >= 36 && channel <= 64) {
+		odm_move_memory(dm, thermal_up_a, txagc_offset_5ga_p[0], sizeof(thermal_up_a));
+		odm_move_memory(dm, thermal_down_a, txagc_offset_5ga_n[0], sizeof(thermal_down_a));
+	} else if (channel >= 100 && channel <= 144) {
+		 odm_move_memory(dm, thermal_up_a, txagc_offset_5ga_p[1], sizeof(thermal_up_a));
+		odm_move_memory(dm, thermal_down_a, txagc_offset_5ga_n[1], sizeof(thermal_down_a));
+	} else if (channel >= 149 && channel <= 177) {
+		odm_move_memory(dm, thermal_up_a, txagc_offset_5ga_p[2], sizeof(thermal_up_a));
+		odm_move_memory(dm, thermal_down_a, txagc_offset_5ga_n[2], sizeof(thermal_down_a));
+	}
+
+	if(thermal_detla < 0) {
+		if (thermal_detla < -29)
+			i = 29;
+		else
+			i = (u8)(-1 * thermal_detla);
+
+		if (path ==0 )
+			power_offset = thermal_down_a[i];
+		else
+			power_offset = thermal_down_b[i];
+
+		RF_DBG(dm, DBG_RF_TX_PWR_TRACK,"[RF][TSSI] Temp is lower\n");
+	} else {
+		if (thermal_detla >= 30)
+			i = 29;
+		else
+			i = thermal_detla;
+
+		if (path ==0 )
+			power_offset = thermal_up_a[i];
+		else
+			power_offset = thermal_up_b[i];
+		RF_DBG(dm, DBG_RF_TX_PWR_TRACK,"[RF][TSSI] Temp is higher\n");
+	}
+
+	return power_offset;
+}
+
+void halrf_powertracking_thermal(void *dm_void)
+{
+	struct dm_struct *dm = (struct dm_struct *)dm_void;
+	struct _hal_rf_ *rf = &dm->rf_table;
+	struct _halrf_tssi_data *tssi = &rf->halrf_tssi_data;
+	struct dm_rf_calibration_struct *cali_info = &(dm->rf_calibrate_info);
+	s8 thermal_value = 0, thermal_detla = 0;
+	s8 power_offset0 = 0, power_offset1 = 0;
+	u8 thermal_base = 0, temp[2] = {0};
+	u8 path;
+	u8 rate = phydm_get_tx_rate(dm);
+	s8 pwr_threshold = 0xe4;
+	s8 offset = 0;
+
+	if(rf->is_tssi_in_progress == 1)
+		return;
+	if (*dm->mp_mode == 1) {
+		if (cali_info->txpowertrack_control <= 2) {
+			RF_DBG(dm, DBG_RF_TX_PWR_TRACK,"[RF][TSSI] return!! txpowertrack_control = %d\n",
+				cali_info->txpowertrack_control);
+			return;
+		}
+	} else {
+		if (!(rf->rf_supportability & HAL_RF_TX_PWR_TRACK)) {
+			RF_DBG(dm, DBG_RF_TX_PWR_TRACK,
+				"[RF][TSSI] ===>is_txpowertracking is false, return!!\n");
+			return;
+		}
+	}
+
+	offset = (s8)odm_get_bb_reg(dm, R_0x3a10, MASKBYTE3);
+
+	if (odm_get_bb_reg(dm, R_0x4318, BIT30) == 1 || offset >= pwr_threshold) {
+		RF_DBG(dm, DBG_RF_TX_PWR_TRACK,"[RF][TSSI] return!! 0x3a10 = 0x%x, 0x4318 = 0x%x\n",
+			offset,odm_get_bb_reg(dm, R_0x4318, MASKDWORD));
+		return;
+	}
+	path = (u8)odm_get_bb_reg(dm, 0x1884, BIT(20));
+	thermal_base = tssi->thermal_cal;
+	thermal_value = (s8)odm_get_rf_reg(dm, 0, RF_0x42, 0x7E);/*path0*/
+	thermal_detla = (s8)(thermal_value - thermal_base);
+	RF_DBG(dm, DBG_RF_TX_PWR_TRACK, "[RF][TSSI] thermal_value = 0x%x, thermal_base = 0x%x\n",
+		thermal_value, thermal_base);
+	power_offset0 = _halrf_get_power_offset_by_thermal_8733b(dm, 0, thermal_detla);
+	power_offset1 = _halrf_get_power_offset_by_thermal_8733b(dm, 1, thermal_detla);
+
+	temp[0] = tssi->txagc_offset_thermaltrack[0]  + 4*(power_offset0);/*s0*/
+	temp[1] = tssi->txagc_offset_thermaltrack[1]  + 4*(power_offset1);/*s1*/
+	/*S0:in the same index,cck_pwr-ofdm_pwr=7dB*/
+	odm_set_bb_reg(dm, R_0x4388, MASKBYTE0, temp[0]);/*s0*/
+	/*S1:in the same index,cck_pwr-ofdm_pwr=5dB*/
+	odm_set_bb_reg(dm, R_0x4388, MASKBYTE2, temp[1]);/*s1*/
+
+	RF_DBG(dm, DBG_RF_TX_PWR_TRACK, "[RF][TSSI] current_Path = %d, tx_rate = 0x%x\n", path, rate);
+	RF_DBG(dm, DBG_RF_TX_PWR_TRACK, "[RF][TSSI] txagc_offset = 0x%x\n",
+		tssi->txagc_offset_thermaltrack[path]);
+	RF_DBG(dm, DBG_RF_TX_PWR_TRACK,
+		"[RF][TSSI] thermal_detla = %d, thermal_offset_s0 = 0x%x, thermal_offset_s1 = 0x%x\n",
+		thermal_detla, power_offset0, power_offset1);
+	RF_DBG(dm, DBG_RF_TX_PWR_TRACK,"[RF][TSSI] 0x4388 = 0x%x\n",
+		odm_get_bb_reg(dm, R_0x4388, MASKDWORD));
+
+
+}
 void halrf_xtal_thermal_track(void *dm_void)
 {
 	struct dm_struct *dm = (struct dm_struct *)dm_void;
@@ -3978,7 +4174,7 @@ void halrf_xtal_thermal_track(void *dm_void)
 	u8  	thermal_base = 0;
 	s8  	xtal_table_up[DELTA_SWINGIDX_SIZE] = {0};
 	s8  	xtal_table_down[DELTA_SWINGIDX_SIZE] = {0};
-	u32 	reg_val = 0, crystal_cap = 0;
+	s32 	reg_val = 0, crystal_cap = 0;
 
 	RF_DBG(dm, DBG_RF_TX_PWR_TRACK,
 	       "[RF][xtal] ======>%s\n", __func__);
@@ -4053,6 +4249,11 @@ void halrf_xtal_thermal_track(void *dm_void)
 			RF_DBG(dm, DBG_RF_TX_PWR_TRACK,
 		       "[RF][Xtal] DEFAULT crystal_cap = 0x%x\n", crystal_cap);
 			reg_val = crystal_cap + cali_info->xtal_offset;
+			if (reg_val > 0x7F)
+				reg_val = 0x7F;
+			else if (reg_val < 0)
+				reg_val = 0x0;
+
 			//reg_val = (u32)(odm_get_mac_reg(dm, R_0x103c, 0x0001FC00) + cali_info->xtal_offset);
 			RF_DBG(dm, DBG_RF_TX_PWR_TRACK,
 		       "[RF][Xtal] reg_val = 0x%x\n", reg_val);

@@ -1916,34 +1916,75 @@ void phydm_rx_hw_ant_div_init_23f(void *dm_void)
 {
 	struct dm_struct *dm = (struct dm_struct *)dm_void;
 	struct phydm_fat_struct *fat_tab = &dm->dm_fat_table;
+	u32 HW_special_type;
+	boolean is_QFN48 = false;
 
 	PHYDM_DBG(dm, DBG_ANT_DIV, "[%s]=====>\n", __func__);
 		/* @3 --RFE pin setting--------- */
-	/* @[MAC] */
-		/* @gpioA_11,gpioA_12*/
-	odm_set_mac_reg(dm, R_0x10d8, 0xFF000000, 0x16);
-	odm_set_mac_reg(dm, R_0x10dc, 0xFF, 0x16);
-	/* @[BB] */
-	odm_set_bb_reg(dm, R_0x1c94, BIT(2) | BIT(3), 0x3); /* output enable */
-	odm_set_bb_reg(dm, R_0x1ca0, BIT(2) | BIT(3), 0x0);
-	odm_set_bb_reg(dm, R_0x1c98, BIT(4) | BIT(5), 0x0);
-		/* r_rfe_path_sel_   (RFE_CTRL_2) */
-	odm_set_bb_reg(dm, R_0x1c98, BIT(6) | BIT(7), 0x0);
-		/* r_rfe_path_sel_   (RFE_CTRL_3) */
-	odm_set_bb_reg(dm, R_0x1838, BIT(28), 0); /* RFE_buffer_en */
-	odm_set_bb_reg(dm, R_0x183c, BIT(2), 1); /* rfe_inv  (RFE_CTRL_2) */
-	odm_set_bb_reg(dm, R_0x183c, BIT(3), 0); /* rfe_inv  (RFE_CTRL_3) */
-	odm_set_bb_reg(dm, R_0x1840, 0xF00, 0x8); /* path-A, RFE_CTRL_2 */
-	odm_set_bb_reg(dm, R_0x1840, 0xF000, 0x8); /* path-A, RFE_CTRL_3 */
-	/* @3 ------------------------- */
+	odm_set_mac_reg(dm, R_0x30, 0xffffffff,0x27a1f900);
+	HW_special_type=odm_get_mac_reg(dm, R_0x30, 0xf0);
+	PHYDM_DBG(dm, DBG_ANT_DIV,
+			"[QF40/48 report] 0x1f9[7:4]  =%x\n",odm_get_mac_reg(dm, R_0x30, 0xf0));
+	if(HW_special_type==0){
+				odm_set_mac_reg(dm, R_0x30, 0xffffffff,0x27a1fc00);
+				PHYDM_DBG(dm, DBG_ANT_DIV,"[QF40/48 report] 0x1fc[7:4]  =%x\n",odm_get_mac_reg(dm, R_0x30, 0xf0));
+				HW_special_type=odm_get_mac_reg(dm, R_0x30, 0xf0);
+				}
+	switch(HW_special_type){
+		case 0x1:
+		case 0x7:
+		case 0x8:
+		case 0xa:
+			is_QFN48 = false;
+			PHYDM_DBG(dm, DBG_ANT_DIV,"[QF40 is used] \n");
+			break;
+		case 0xc:
+		case 0xe:
+			is_QFN48 = true;
+			PHYDM_DBG(dm, DBG_ANT_DIV,"[QF48 is used] \n");
+			break;
+		case 0xf:
+			PHYDM_DBG(dm, DBG_ANT_DIV,"[QF40/48 no used] \n");
+			break;
+		case 0x0:
+			PHYDM_DBG(dm, DBG_ANT_DIV,"[QF40/48 abort] \n");
+			break;
+		default:
+			PHYDM_DBG(dm, DBG_ANT_DIV,"[QF40/48 not defined] \n");
+	}
 
+	/* @3 --RFE pin setting--------- */
+	/* @[MAC] */
+	if(!is_QFN48){
+		/* @gpioA_15 funciion id*/
+		odm_set_mac_reg(dm, R_0x10dc, 0xFF000000, 0x16);
+		/* @[BB] */
+		odm_set_bb_reg(dm, R_0x1c94, BIT(5), 0x1); /* rfe_ctrl_5 output enable */
+		odm_set_bb_reg(dm, R_0x1ca0, BIT(5), 0x0);/*rfe_ctrl_5  output source 0:rfe_ctrl_src,1:rfe_gpio_dbg */
+		odm_set_bb_reg(dm, R_0x1c98, BIT(10) | BIT(11), 0x0);/* r_rfe_path_sel_   (RFE_CTRL_5) */
+		odm_set_bb_reg(dm, R_0x183c, BIT(5), 0); /* rfe_inv  (RFE_CTRL_5) */
+		odm_set_bb_reg(dm, R_0x1840, 0xF00000, 0x8); /* path-A, RFE_CTRL_5 */
+	}
+	else{
+		/* @gpioA_11 funciion id*/
+		odm_set_mac_reg(dm, R_0x10d8, 0xFF000000, 0x16);
+		/* @[BB] */
+		odm_set_bb_reg(dm, R_0x1c94, BIT(2), 0x1); /* rfe_ctrl_2 output enable */
+		odm_set_bb_reg(dm, R_0x1ca0, BIT(2), 0x0);/* rfe_ctrl_2 output source 0:rfe_ctrl_src,1:rfe_gpio_dbg */
+		odm_set_bb_reg(dm, R_0x1c98, BIT(4) | BIT(5), 0x0);/* r_rfe_path_sel_   (RFE_CTRL_2) */
+		odm_set_bb_reg(dm, R_0x183c, BIT(2), 0); /* rfe_inv  (RFE_CTRL_2) */
+		odm_set_bb_reg(dm, R_0x1840, 0xF00, 0x8); /* path-A, RFE_CTRL_2 */
+	}
+	odm_set_bb_reg(dm, R_0x1838, BIT(28), 0); /* RFE_buffer_en */
 	/* Pin Settings */
-	odm_set_bb_reg(dm, R_0x1884, BIT(23), 0);
-	odm_set_bb_reg(dm, R_0x1884, BIT(25), 0);
-	/* reg1844[23]=1'b0 *//*"CG switching" is controlled by HWs*/
-	/* reg1844[25]=1'b0 *//*"CG switching" is controlled by HWs*/
-	odm_set_bb_reg(dm, R_0x1884, BIT(16), 1);
-	/* reg1844[16]=1'b1 *//*"antsel" is controlled by HWs*/
+	if (dm->ant_div_type == CGCS_RX_HW_ANTDIV){
+		odm_set_bb_reg(dm, R_0x1884, BIT(23), 0);
+		odm_set_bb_reg(dm, R_0x1884, BIT(25), 0);
+		/* reg1844[23]=1'b0 *//*"CG switching" is controlled by HWs*/
+		/* reg1844[25]=1'b0 *//*"CG switching" is controlled by HWs*/
+		odm_set_bb_reg(dm, R_0x1884, BIT(16), 1);
+		/* reg1844[16]=1'b1 *//*"antsel" is controlled by HWs*/
+	}
 
 	/* @Mapping table */
 	odm_set_bb_reg(dm, R_0x1870, 0xFFFF, 0x0100);

@@ -220,11 +220,28 @@
 #define RF_0x52			0x52
 #define RF_WeLut_Jaguar		0xEF	/* rtl8733b_phy.c */
 
+#ifdef CONFIG_FW_HANDLE_TXBCN
+/*
+ * CONFIG_FW_HANDLE_TXBCN
+ */
+#define REG_ATIMWND REG_ATIMWND_GROUP1_8733B
+#define REG_ATIMWND1_V1 REG_ATIMWND_GROUP2_8733B
+#define REG_ATIMWND2 REG_ATIMWND_GROUP3_8733B
+#define REG_ATIMWND3 REG_ATIMWND_GROUP4_8733B
+#define REG_HIQ_NO_LMT_EN REG_HIQ_NO_LMT_EN_V2_8733B
+#define REG_MBSSID_CTRL REG_MBID_BCNQ_EN_8733B
+
+/* REG_DWBCN0_CTRL [15:8] BIT_BCN_HEAD [16] BIT_BCN_VALID*/
+#define REG_FIFOPAGE_CTRL_2 (REG_DWBCN0_CTRL + 1)
+#define BIT_BCN_VALID_V1 BIT(8)
+#define BIT_MASK_BCN_HEAD_1_V1 0xff
+#endif /* CONFIG_FW_HANDLE_TXBCN */
+
 /* rtw_lps_state_chk() @hal_com.c */
 #define BIT_PWRBIT_OW_EN	BIT_WMAC_TCR_PWRMGT_CTL_8733B
 
-/* 
-* General Functions 
+/*
+* General Functions
 */
 void rtl8733b_init_hal_spec(PADAPTER);				/* hal/hal_com.c */
 

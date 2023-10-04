@@ -356,10 +356,22 @@ static void init_phydm_cominfo(PADAPTER adapter)
 {
 	PHAL_DATA_TYPE hal;
 	struct dm_struct *p_dm_odm;
-	u32 support_ability = 0;
+	struct registry_priv *registry_par = &adapter->registrypriv;
 
 	hal = GET_HAL_DATA(adapter);
 	p_dm_odm = &hal->odmpriv;
+
+#ifdef CONFIG_ANTENNA_DIVERSITY
+		/*
+		* @antdiv_cfg 0:off, 1:on, 2:by efuse
+		* 8733B's antenna diversity can't controk by efuse,
+		* so enabled by compiler flag and @antdiv_cfg
+		*/
+		if (registry_par->antdiv_cfg > 0)
+			hal->AntDivCfg = 1;
+		else
+			hal->AntDivCfg = 0;
+#endif
 
 	Init_ODM_ComInfo(adapter);
 
@@ -594,7 +606,7 @@ void rtl8733b_set_tx_power_level(PADAPTER adapter, u8 channel)
 	for (path = RF_PATH_A; path < hal_spec->rf_reg_path_num; ++path) {
 #ifdef CONFIG_TXPWR_PG_WITH_TSSI_OFFSET
 		if (hal_data->txpwr_pg_mode == TXPWR_PG_WITH_TSSI_OFFSET) {
-			_halrf_tssi_set_powerlevel_8733b(phydm, path);
+			_halrf_tssi_set_powerlevel_8733b(phydm, 0, path);
 		} else 
 #endif
 		{

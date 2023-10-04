@@ -123,6 +123,7 @@ static void _init_mp_priv_(struct mp_priv *pmp_priv)
 	pmp_priv->prime_channel_offset = HAL_PRIME_CHNL_OFFSET_DONT_CARE;
 	pmp_priv->rateidx = RATE_1M;
 	pmp_priv->txpoweridx = 0x2A;
+	pmp_priv->txpower_dbm_offset = 0;
 
 	pmp_priv->antenna_tx = ANTENNA_A;
 	pmp_priv->antenna_rx = ANTENNA_AB;
@@ -1418,7 +1419,11 @@ exit:
 	pmptx->pallocated_buf = NULL;
 	pmptx->stop = 1;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 17, 0)
 	thread_exit(NULL);
+#else
+	kthread_thread_exit(NULL);
+#endif
 	return 0;
 }
 
@@ -3989,4 +3994,12 @@ void VHT_Delimiter_generator(
 }
 
 #endif
+
+#ifdef RTW_HALMAC
+int SetGpio(PADAPTER pAdapter, u8 gpio_id, u8 gpio_enable, u8 gpio_func_offset, u8 gpio_mode)
+{
+	return hal_mpt_SetGpio(pAdapter, gpio_id, gpio_enable, gpio_func_offset, gpio_mode);
+}
+#endif
+
 #endif

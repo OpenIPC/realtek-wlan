@@ -182,6 +182,9 @@ struct security_priv {
 	u8 owe_ie[MAX_OWE_IE_LEN];/* added in assoc req */
 	int owe_ie_len;
 
+	u8 rsnx_ie[MAX_RSNX_IE_LEN];
+	int rsnx_ie_len;
+
 	u8	binstallGrpkey;
 #ifdef CONFIG_GTK_OL
 	u8	binstallKCK_KEK;
@@ -293,7 +296,7 @@ struct security_priv {
 		} \
 	} while (0)
 
-#define _AES_IV_LEN_ 8
+#define IV_LENGTH 8
 
 #define SET_ICE_IV_LEN(iv_len, icv_len, encrypt)\
 	do {\
@@ -416,6 +419,12 @@ u16 rtw_calc_crc(u8  *pdata, int length);
 #define rtw_sec_chk_auth_type(a, s) \
 	((a)->securitypriv.auth_type == (s))
 
+#define IV_FMT "0x%02x%02x%02x%02x%02x%02x%02x%02x"
+#define IV_ARG(iv) iv[7], iv[6], iv[5], iv[4], iv[3], iv[2], iv[1], iv[0]
+#define PN_FMT "0x%02x%02x%02x%02x%02x%02x"
+#define PN_ARG(pn) pn[5], pn[4], pn[3], pn[2], pn[1], pn[0]
+u8 rtw_iv_to_pn(u8 *iv, u8 *pn, u8 *key_id, u32 enc_algo);
+u8 rtw_pn_to_iv(u8 *pn, u8 *iv, u8 key_id, u32 enc_algo);
 #endif /* __RTL871X_SECURITY_H_ */
 
 u32 rtw_calc_crc32(u8 *data, size_t len);

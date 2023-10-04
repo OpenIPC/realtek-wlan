@@ -64,7 +64,7 @@
 #define WLAN_SIFS_CCK_CONT_TX	0x0A
 #define WLAN_SIFS_OFDM_CONT_TX	0x0E
 #define WLAN_SIFS_CCK_TRX	0x0A
-#define WLAN_SIFS_OFDM_TRX	0x10
+#define WLAN_SIFS_OFDM_TRX	0x0E
 #define WLAN_NAV_MAX		0xC8
 #define WLAN_RDG_NAV		0x05
 #define WLAN_TXOP_NAV		0x1B
@@ -1178,91 +1178,8 @@ init_wmac_cfg_8733b(struct halmac_adapter *adapter)
 	HALMAC_REG_W8(REG_WMAC_OPTION_FUNCTION_1, value8);
 	//rdata=0xffffffff;
 	//HALMAC_REG_W16_CLR(0x7D4,BIT(15));  //yx_qi, disable rx macid search temporaryly,
-	/*
 
-	//indirect access,8733B not supported
-
-	rdata=HALMAC_REG_R32(0x6bc);
-	wdata=(rdata&0x0000FFFF)|(0x150<<16);
-	HALMAC_REG_W32(0x6bc,wdata);
-	rdata=HALMAC_REG_R32(0x6bc);
-
-	rdata=HALMAC_REG_R32(0x7d4);
-	wdata=(rdata&0xfff7ffff)|BIT(20)|BIT(15)|BIT(16);
-	HALMAC_REG_W32(0x7d4,wdata);
-	rdata=HALMAC_REG_R32(0x7d4);
-
-	rdata=HALMAC_REG_R32(0x7cc);
-	wdata=(rdata&0xfffffffe);
-	HALMAC_REG_W32(0x7cc,wdata);
-	rdata=HALMAC_REG_R32(0x7cc);
-	
-	//set ctrl info and CRC5
-	rdata=HALMAC_REG_R32(0x104);
-	wdata=(rdata&0xff00ffff)|(0x7F<<16);
-	HALMAC_REG_W32(0x104,wdata);  //read TXRPT
-	rdata=HALMAC_REG_R32(0x104);
-
-	//reset ctrl info
-	//for(i=0;i< 4*32;i++)
-	for(i=0;i< 5*16;i++)//16 macid,each macid 40Bytes
-	{
-		HALMAC_REG_W8(0x143,0x0);
-		HALMAC_REG_W16(0x140,i);
-		HALMAC_REG_W32(0x144,0x0);
-		HALMAC_REG_W32(0x148,0x0);
-		rdata=HALMAC_REG_R32(0x140);
-		wdata=rdata|BIT(20)|(0xFF<24);
-		HALMAC_REG_W32(0x140,wdata);
-		rdata=HALMAC_REG_R32(0x140);
-		rdata=HALMAC_REG_R32(0x144);
-		rdata=HALMAC_REG_R32(0x148);
-	}
-	
-	//write MAC address in ctrl info
-	HALMAC_REG_W8(0x143,0x0);
-	HALMAC_REG_W16(0x140,0x2);
-	HALMAC_REG_W32(0x144,0x02);
-	HALMAC_REG_W32(0x148,0x0);
-	rdata=HALMAC_REG_R32(0x140);
-	wdata=rdata|BIT(20)|(0xFF<24);
-	HALMAC_REG_W32(0x140,wdata);
-	rdata=HALMAC_REG_R32(0x144);
-	rdata=HALMAC_REG_R32(0x148);
-
-	//crc5=CRC5_USB(DA,6);
-	//HALMAC_REG_W32(REG_SEARCH_MACID_8733B);
-
-	//reset crc5
-	for(i=0;i<12;i++)
-	{
-		HALMAC_REG_W8(0x143,0x0);
-		crc5_addr=0x150+i;//i is entry num
-		HALMAC_REG_W16(0x140,crc5_addr);
-		crc5=0;
-		HALMAC_REG_W32(0x144,crc5);
-		HALMAC_REG_W32(0x148,0x0);//make high 32bit to 0x148
-		rdata=HALMAC_REG_R32(0x140);
-		wdata=rdata|BIT(20)|(0xFF<24);
-		HALMAC_REG_W32(0x140,wdata);
-	}
-
-	crc5=CRC5_USB(DA,6);
-
-	//write CRC5 into txrpt buffer
-	HALMAC_REG_W8(0x143,0x0);
-	crc5_addr=0x150;//crc5 default address:0x150
-	HALMAC_REG_W16(0x140,0x150);
-	wdata_H=0x1<<28;
-	wdata_L=crc5;//bit60 valid
-	HALMAC_REG_W32(0x144,wdata_L);
-	HALMAC_REG_W32(0x148,wdata_H);//make high 32bit to 0x148
-	rdata=HALMAC_REG_R32(0x140);
-	wdata=rdata|BIT(20)|(0xFF<24);
-	HALMAC_REG_W32(0x140,wdata);
-	*/
-
-/**********************************************************************************************************/
+/*
 	//MACID search , receive data frame
 	//direct access txrpt buffer,write MAC address and crc5 into txrpt buffer
 	//jerry_zhou
@@ -1304,20 +1221,7 @@ init_wmac_cfg_8733b(struct halmac_adapter *adapter)
 	wdata=(rdata&0xfffffffe);
 	HALMAC_REG_W32(REG_WMAC_FTM_CTL,wdata);
 	rdata=HALMAC_REG_R32(REG_WMAC_FTM_CTL);
-/**********************************************************************************************************/	
-    //fw
-	/*rdata=HALMAC_REG_R8(0x1008);
-	wdata=rdata|BIT(1);
-	HALMAC_REG_W8(0x1008,wdata);
-
-	rdata=HALMAC_REG_R8(0x1001);
-	wdata=rdata|BIT(5) | BIT(4);
-	HALMAC_REG_W8(0x1001,wdata);
-
-	rdata=HALMAC_REG_R8(0x1000);
-	wdata=rdata &0x3F;
-	HALMAC_REG_W8(0x1000,wdata);
-	*/
+*/	
 
 	//HALMAC_REG_W32(0x200,0x80790808);
 	status = api->halmac_init_low_pwr(adapter);

@@ -807,7 +807,7 @@ int rtw_get_bcn_keys(_adapter *adapter, u8 *whdr, u32 flen, struct beacon_keys *
 int rtw_get_bcn_keys_from_bss(WLAN_BSSID_EX *bss, struct beacon_keys *bcn_keys);
 int rtw_update_bcn_keys_of_network(struct wlan_network *network);
 
-int validate_beacon_len(u8 *pframe, uint len);
+int validate_bcn_and_probe_rsp_len(u8 *pframe, uint len);
 void rtw_dump_bcn_keys(void *sel, struct beacon_keys *recv_beacon);
 void rtw_bcn_key_err_fix(struct beacon_keys *cur, struct beacon_keys *recv);
 bool rtw_bcn_key_compare(struct beacon_keys *cur, struct beacon_keys *recv);
@@ -1154,6 +1154,10 @@ u8 rtw_set_chplan_hdl(_adapter *padapter, unsigned char *pbuf);
 u8 rtw_get_chplan_hdl(_adapter *padapter, unsigned char *pbuf);
 u8 led_blink_hdl(_adapter *padapter, unsigned char *pbuf);
 u8 set_csa_hdl(_adapter *padapter, unsigned char *pbuf);	/* Kurt: Handling DFS channel switch announcement ie. */
+u8 set_ap_csa_hdl(_adapter *adapter, unsigned char *pbuf);
+u8 bcn_control_hdl(_adapter *adapter, unsigned char *pbuf);
+void rtw_update_mlme(_adapter *adapter, u8 *frame, u32 frame_len);
+u8 rtw_csa_sta_update_cap_hdl(_adapter *adapter, unsigned char *pbuf);
 u8 tdls_hdl(_adapter *padapter, unsigned char *pbuf);
 u8 run_in_thread_hdl(_adapter *padapter, u8 *pbuf);
 u8 rtw_write_bcnlen_hdl(_adapter *padapter, u8 *pbuf);
@@ -1161,6 +1165,7 @@ u8 rtw_write_bcnlen_hdl(_adapter *padapter, u8 *pbuf);
 int rtw_sae_preprocess(_adapter *adapter, const u8 *buf, u32 len, u8 tx);
 
 u32 rtw_desc_rate_to_bitrate(u8 bw, u8 rate_idx, u8 sgi);
+u8 *build_supported_op_class_ie(_adapter *padapter, u8 *pbuf, int *pktlen);
 
 #ifdef CONFIG_RTW_MULTI_AP
 u8 rtw_get_ch_utilization(_adapter *adapter);
@@ -1207,6 +1212,10 @@ struct rtw_cmd wlancmds[] = {
 	GEN_MLME_EXT_HANDLER(rtw_iqk_hdl, NULL) /*CMD_DO_IQK*/
 	GEN_MLME_EXT_HANDLER(rtw_get_chplan_hdl, NULL) /* CMD_GET_CHANPLAN */
 	GEN_MLME_EXT_HANDLER(rtw_write_bcnlen_hdl, NULL) /* CMD_WRITE_BCN_LEN */
+	GEN_MLME_EXT_HANDLER(set_ap_csa_hdl, NULL) /* CMD_AP_CHANSWITCH */
+
+	GEN_MLME_EXT_HANDLER(bcn_control_hdl, NULL) /* CMD_BCN_CONTROL */
+	GEN_MLME_EXT_HANDLER(rtw_csa_sta_update_cap_hdl, NULL) /* CMD_BCN_CONTROL */
 };
 #endif
 

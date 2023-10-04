@@ -137,6 +137,18 @@ s32 rtl8733b_fw_dl(PADAPTER adapter, u8 wowlan)
 		err = rtw_halmac_dlfw_from_file(d, rtw_phy_para_file_path);
 	} else
 #endif /* CONFIG_FILE_FWIMG */
+#ifdef CONFIG_CCV_FW
+	if (hal->version_id.CUTVersion == 2)
+	{
+		#ifdef CONFIG_WOWLAN
+		if (_TRUE == wowlan)
+			err = rtw_halmac_dlfw(d, ccv_array_mp_8733b_fw_wowlan, ccv_array_length_mp_8733b_fw_wowlan);
+		else
+		#endif /* CONFIG_WOWLAN */
+			err = rtw_halmac_dlfw(d, ccv_array_mp_8733b_fw_nic, ccv_array_length_mp_8733b_fw_nic);
+	}
+	else
+#endif
 	{
 		#ifdef CONFIG_WOWLAN
 		if (_TRUE == wowlan)

@@ -3114,6 +3114,7 @@ boolean odm_phy_status_query(struct dm_struct *dm,
 #endif
 	u8 rate = pktinfo->data_rate;
 	u8 page = (*phy_sts & 0xf);
+	u8 i = 0;
 
 	pktinfo->is_cck_rate = PHYDM_IS_CCK_RATE(rate);
 	pktinfo->rate_ss = phydm_rate_to_num_ss(dm, rate);
@@ -3137,6 +3138,19 @@ boolean odm_phy_status_query(struct dm_struct *dm,
 		}
 		#endif
 		phydm_rx_physts_jgr3(dm, phy_sts, pktinfo, phy_info);
+		#if (RTL8733B_SUPPORT)
+		if (dm->support_ic_type & ODM_RTL8733B) {
+			if (!pktinfo->is_cck_rate) {
+				for (i = RF_PATH_A; i < dm->num_rf_path; i++) {
+					if (phy_info->rx_mimo_signal_strength[i] == 0) {
+						PHYDM_DBG(dm, DBG_PHY_STATUS, "SKIP parsing, rssi = 0\n");
+						phy_info->physts_rpt_valid = false;
+						return false;
+					}
+				}
+			}
+		}
+		#endif
 		phydm_process_dm_rssi_jgr3(dm, phy_info, pktinfo);
 		#endif
 	} else if (dm->support_ic_type & PHYSTS_2ND_TYPE_IC) {

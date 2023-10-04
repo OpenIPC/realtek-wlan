@@ -298,4 +298,7 @@
  */
 #define DBG	1
 #define DBG_CONFIG_ERROR_DETECT
+#define RTW_DETECT_HANG
+
 /* #define CONFIG_DISABLE_ODM */
+#define CONFIG_CCV_FW

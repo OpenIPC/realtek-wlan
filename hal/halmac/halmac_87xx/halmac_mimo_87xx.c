@@ -63,10 +63,13 @@ cfg_txbf_87xx(struct halmac_adapter *adapter, u8 userid, enum halmac_bw bw,
 		switch (bw) {
 		case HALMAC_BW_80:
 			tmp42c |= BIT_R_TXBF0_80M;
-		/* pass through */
+			//Linux-5.3 start to check fallthrough,
+			//linux-5.4 start to implement fallthrough pesudo keyword (coexisting with the writing of ¡°fallthrough comment¡± ),
+			//but linux-5.14+ only support the fallthrough pesudo keyword
+			fallthrough;
 		case HALMAC_BW_40:
 			tmp42c |= BIT_R_TXBF0_40M;
-		/* pass through */
+			fallthrough;
 		case HALMAC_BW_20:
 			tmp42c |= BIT_R_TXBF0_20M;
 			break;

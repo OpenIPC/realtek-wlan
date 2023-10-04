@@ -52,7 +52,7 @@ void halrf_do_tssi_8733b(void *dm_void);
 
 void _halrf_tssi_8733b(void *dm_void, u8 path);
 
-void _halrf_tssi_set_powerlevel_8733b(void *dm_void, u8 path);
+void _halrf_tssi_set_powerlevel_8733b(void *dm_void, s16 power_offset, u8 path);
 
 u32 halrf_tssi_set_powerbyrate_pout_8733b(void *dm_void, s16 power_offset, u8 path);
 

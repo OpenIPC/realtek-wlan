@@ -142,6 +142,7 @@ s16 get_sub_op_class(u8 gid, u8 ch);
 void dump_global_op_class(void *sel);
 u8 rtw_get_op_class_by_chbw(u8 ch, u8 bw, u8 offset);
 u8 rtw_get_bw_offset_by_op_class_ch(u8 gid, u8 ch, u8 *bw, u8 *offset);
+int get_supported_op_class(_adapter *padapter, u8 *op_set, int len);
 
 struct op_ch_t {
 	u8 ch;
