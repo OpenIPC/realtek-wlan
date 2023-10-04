@@ -253,7 +253,7 @@ void fill_txdesc_force_bmc_camid(struct pkt_attrib *pattrib, struct tx_desc *ptx
 	s32 rtl8188es_xmit_buf_handler(PADAPTER padapter);
 
 	#ifdef CONFIG_SDIO_TX_TASKLET
-		void rtl8188es_xmit_tasklet(void *priv);
+		void rtl8188es_xmit_tasklet(unsigned long priv);
 	#endif
 #endif
 

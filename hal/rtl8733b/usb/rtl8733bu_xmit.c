@@ -841,7 +841,7 @@ static s32 rtl8733bu_xmitframe_complete(PADAPTER padapter, struct xmit_priv *pxm
 }
 #endif
 
-static void rtl8733bu_xmit_tasklet(void *priv)
+static void rtl8733bu_xmit_tasklet(unsigned long priv)
 {
 	int ret = _FALSE;
 	_adapter *padapter = (_adapter *)priv;
@@ -872,8 +872,8 @@ s32	rtl8733bu_init_xmit_priv(PADAPTER padapter)
 
 #ifdef PLATFORM_LINUX
 	tasklet_init(&pxmitpriv->xmit_tasklet,
-		     (void(*)(unsigned long))rtl8733bu_xmit_tasklet,
-		     (unsigned long)padapter);
+			rtl8733bu_xmit_tasklet,
+			(unsigned long)padapter);
 #endif
 #ifdef CONFIG_TX_EARLY_MODE
 	pHalData->bEarlyModeEnable = padapter->registrypriv.early_mode;

@@ -682,8 +682,11 @@ void _iqk_rxk_rf_setting_8733b(void *dm_void, u8 path)
 		odm_set_rf_reg(dm, RF_PATH_B, RF_0x00, 0xF0000, 0x7);  //0xC
 		odm_set_rf_reg(dm, RF_PATH_B, RF_0x88, 0x0000F, 0x3);
 	}
-	//G mode: IQKPLL_EN_IQK_G: 20[8]=1
-	odm_set_rf_reg(dm, path, RF_0x20, BIT(8), 0x1);
+	if (iqk_info->iqk_band == 0)
+		odm_set_rf_reg(dm, path, RF_0x20, BIT(8), 0x1);
+	else
+		odm_set_rf_reg(dm, path, RF_0x20, BIT(7), 0x1);
+
 	//IQKPLL_MODE_AG: 1F[17:16]  (same as 18[17:16])
 	//IQKPLL_CH: 1F[9:0]	     (same as 18[9:0])
 	//other 0x1F bit are reserved, so it is ok to copy 0x18 to 0x1f.
@@ -714,11 +717,16 @@ void _iqk_txk_rf_setting_8733b(void *dm_void, u8 path)
 		// Gmode : {0x51[19],0x51[11],0x52[11]}=Att_SMXR
 		// Amode : 0x60[2:0]=Att_SMXR
 		odm_set_rf_reg(dm, path, RF_0x60, 0x00007, 0x7);
+		if (iqk_info->iqk_band == 0) {//G mode
+			odm_set_rf_reg(dm, RF_PATH_A, RF_0x51, BIT(19), 0x0);
+			odm_set_rf_reg(dm, RF_PATH_A, RF_0x51, BIT(11), 0x0);
+			odm_set_rf_reg(dm, RF_PATH_A, RF_0x52, BIT(11), 0x0);
+		} 
 	} else if (path == RF_PATH_B) {
-		odm_set_rf_reg(dm, RF_PATH_A, RF_0x51, BIT(19), 0x1);
+		odm_set_rf_reg(dm, RF_PATH_A, RF_0x51, BIT(19), 0x0);
 		odm_set_rf_reg(dm, RF_PATH_A, RF_0x51, BIT(11), 0x0);
 		odm_set_rf_reg(dm, RF_PATH_A, RF_0x52, BIT(11), 0x0);
-		odm_set_rf_reg(dm, RF_PATH_B, RF_0x51, BIT(19), 0x1);
+		odm_set_rf_reg(dm, RF_PATH_B, RF_0x51, BIT(19), 0x0);
 		odm_set_rf_reg(dm, RF_PATH_B, RF_0x51, BIT(11), 0x0);
 		odm_set_rf_reg(dm, RF_PATH_B, RF_0x52, BIT(11), 0x0);
 	}
@@ -1193,120 +1201,127 @@ void _iqk_rxk_by_path_8733b(void *dm_void, u8 path)
 		reg1b00 = 0x428;
 	}
 	//++++++ lna small ++++++++++++++++++++
-	//LNA[13:11], TIA[10], RXBB[9:5], [4]=reserved
-	odm_set_rf_reg(dm, RF_PATH_A, RF_0x00, 0x03FF0, 0x1cc);
-	odm_set_rf_reg(dm, RF_PATH_B, RF_0x00, 0x03FF0, 0x1cc);
-	// Gmode, Att between IQKPLL and RX
-	// 0x83[16:10]=C2
-	// 0x83[9:8]=C1
-	// Gain~=C1/(C1+C2)
-	odm_set_rf_reg(dm, path, RF_0x83, 0x00300, 0x2);
-	odm_set_rf_reg(dm, path, RF_0x83, 0x1FC00, 0x79);
-		// [19:0]=RX_PI_DATA
-		// [19:16]=RF_Mode
-		// [13:11]=LNA, [10]=TIA, [9:5]=RxBB
-		// RX_PI_DATA[19:0] is same as RF0x00
+	if (iqk_info->iqk_band == 0) {
+		odm_set_rf_reg(dm, RF_PATH_A, RF_0x00, 0x03FF0, 0x1cc);
+		odm_set_rf_reg(dm, RF_PATH_B, RF_0x00, 0x03FF0, 0x1cc);
+
+		odm_set_rf_reg(dm, path, RF_0x83, 0x00300, 0x2);
+		odm_set_rf_reg(dm, path, RF_0x83, 0x1FC00, 0x79);
+	} else {
+		odm_set_rf_reg(dm, RF_PATH_A, RF_0x00, 0x03FF0, 0x1c8);
+
+		odm_set_rf_reg(dm, path, RF_0x8c, 0x00180, 0x1);
+		odm_set_rf_reg(dm, path, RF_0x8c, 0x0007F, 0x07);
+	}
+	// [19:0]=RX_PI_DATA
+	// [19:16]=RF_Mode
+	// [13:11]=LNA, [10]=TIA, [9:5]=RxBB
+	// RX_PI_DATA[19:0] is same as RF0x00
 	rx_pi_data = odm_get_rf_reg(dm, path, RF_0x00, 0xFFFFF);
 	RF_DBG(dm, DBG_RF_IQK, "[IQK]RX_PI_DATA = 0x%x\n", rx_pi_data);
 	odm_set_bb_reg(dm, R_0x1b24, 0x000FFFFF, rx_pi_data);
-		RF_DBG(dm, DBG_RF_IQK, "[IQK]1b24= 0x%x\n",
-		       odm_get_bb_reg(dm, 0x1b24, MASKDWORD));
-		// ====START : NCTL=====
-		odm_set_bb_reg(dm, 0x1b10, 0x000000FF, 0x00);
-		//lna=0x3
-		odm_set_bb_reg(dm, 0x1b34, 0x0000007C, 0x07);
-		//r_tst_iqk2set = 0x1
-		odm_set_bb_reg(dm, 0x1bb8, BIT(20), 0x1);
-		odm_set_bb_reg(dm, 0x1bcc, 0x0000003F, 0x3f);
-		// Rx_tone_idx=0x044 (4.25MHz)
-		odm_set_bb_reg(dm, 0x1b2c, 0x0FFF0000, 0x044);
+	RF_DBG(dm, DBG_RF_IQK, "[IQK]1b24= 0x%x\n",
+	odm_get_bb_reg(dm, 0x1b24, MASKDWORD));
+	// ====START : NCTL=====
+	odm_set_bb_reg(dm, 0x1b10, 0x000000FF, 0x00);
+	//lna=0x3
+	odm_set_bb_reg(dm, 0x1b34, 0x0000007C, 0x07);
+	//r_tst_iqk2set = 0x1
+	odm_set_bb_reg(dm, 0x1bb8, BIT(20), 0x1);
+	odm_set_bb_reg(dm, 0x1bcc, 0x0000003F, 0x3f);
+	// Rx_tone_idx=0x044 (4.25MHz)
+	odm_set_bb_reg(dm, 0x1b2c, 0x0FFF0000, 0x044);
 
-		if (odm_get_bb_reg(dm, R_0x2d9c, 0x000000FF) == 0x0) {
-			RF_DBG(dm, DBG_RF_IQK, "[IQK]START : NB TXIQK NCTL(one shot)!\n");
-			//set cal_path, process id
-			odm_set_bb_reg(dm, R_0x1b00, 0x00001FFF, reg1b00);
-			RF_DBG(dm, DBG_RF_IQK, "[IQK]reg 1b00 = 0x%x!\n",
-			       odm_get_bb_reg(dm, R_0x1b00, MASKDWORD));
-			odm_set_bb_reg(dm, R_0x1b00, BIT(0), 0x1);//one shot
-			while (i < 10) {
-				i++;
-				ODM_delay_ms(2);
-				if (odm_get_bb_reg(dm, R_0x2d9c, 0x000000FF) == 0x55) {
-					RF_DBG(dm, DBG_RF_IQK, "[IQK]NCTL FRxK done, delaytime = %d ms!\n", i * 2);
-				break;
+	if (odm_get_bb_reg(dm, R_0x2d9c, 0x000000FF) == 0x0) {
+		RF_DBG(dm, DBG_RF_IQK, "[IQK]START : NB TXIQK NCTL(one shot)!\n");
+		//set cal_path, process id
+		odm_set_bb_reg(dm, R_0x1b00, 0x00001FFF, reg1b00);
+		RF_DBG(dm, DBG_RF_IQK, "[IQK]reg 1b00 = 0x%x!\n",
+		       odm_get_bb_reg(dm, R_0x1b00, MASKDWORD));
+		odm_set_bb_reg(dm, R_0x1b00, BIT(0), 0x1);//one shot
+		while (i < 10) {
+			i++;
+			ODM_delay_ms(2);
+			if (odm_get_bb_reg(dm, R_0x2d9c, 0x000000FF) == 0x55) {
+				RF_DBG(dm, DBG_RF_IQK, "[IQK]NCTL FRxK done, delaytime = %d ms!\n", i * 2);
+			break;
 			}
 		}
-			RF_DBG(dm, DBG_RF_IQK, "[IQK]END : NB RXIQK NCTL!\n");
-			RF_DBG(dm, DBG_RF_IQK, "[IQK]RXIQK 1b08[26]= 0x%x!\n", odm_get_bb_reg(dm, 0x1b08, BIT(26)));
-			KFAIL = (u8)odm_get_bb_reg(dm, 0x1b08, BIT(26));
-			RF_DBG(dm, DBG_RF_IQK, "[IQK]RXIQK small LNA %s!\n", (KFAIL == 0 ? "success" : "fail"));
-			//1b3c auto write!
-			if (!KFAIL) {
-				reg_1b3c = odm_get_bb_reg(dm, 0x1b3c, MASKDWORD);
-				RF_DBG(dm, DBG_RF_IQK, "[IQK]small LNA RXIQK, BBreg_1b3c= 0x%x\n", reg_1b3c);
+		RF_DBG(dm, DBG_RF_IQK, "[IQK]END : NB RXIQK NCTL!\n");
+		RF_DBG(dm, DBG_RF_IQK, "[IQK]RXIQK 1b08[26]= 0x%x!\n", odm_get_bb_reg(dm, 0x1b08, BIT(26)));
+		KFAIL = (u8)odm_get_bb_reg(dm, 0x1b08, BIT(26));
+		RF_DBG(dm, DBG_RF_IQK, "[IQK]RXIQK small LNA %s!\n", (KFAIL == 0 ? "success" : "fail"));
+		//1b3c auto write!
+		if (!KFAIL) {
+			reg_1b3c = odm_get_bb_reg(dm, 0x1b3c, MASKDWORD);
+			RF_DBG(dm, DBG_RF_IQK, "[IQK]small LNA RXIQK, BBreg_1b3c= 0x%x\n", reg_1b3c);
 			iqk_info->rxxy[path][0][0] = (reg_1b3c & 0x7FF00000) >> 20;  //rx_x
 			iqk_info->rxxy[path][1][0] = (reg_1b3c & 0x0007FF00) >> 8 ;  //rx_y
 			iqk_info->iqk_fail_report[1][path][0] = true;
-			} else {
-				iqk_info->iqk_fail_report[1][path][0] = false; //[RX][path][rxs]
-			}
+		} else {
+			iqk_info->iqk_fail_report[1][path][0] = false; //[RX][path][rxs]
+		}
 		RF_DBG(dm, DBG_RF_IQK, "[IQK]rxxy[%d][0][0]= 0x%x\n", path, iqk_info->rxxy[path][0][0]);
 		RF_DBG(dm, DBG_RF_IQK, "[IQK]rxxy[%d][1][0]= 0x%x\n", path, iqk_info->rxxy[path][1][0]);
-
-		} else {
-			RF_DBG(dm, DBG_RF_IQK, "[IQK]Jump : NB RXIQK NCTL not ready!\n");
-		}
+	} else {
+		RF_DBG(dm, DBG_RF_IQK, "[IQK]Jump : NB RXIQK NCTL not ready!\n");
+	}
 		//++++++ lna large ++++++++++++++++++++
-		//try lna=1, rxbb=10000
-		//LNA[13:11], TIA[10], RXBB[9:5], [4]=reserved
+	if (iqk_info->iqk_band == 0) {
 		odm_set_rf_reg(dm, RF_PATH_A, RF_0x00, 0x03FF0, 0x342);
 		odm_set_rf_reg(dm, RF_PATH_B, RF_0x00, 0x03FF0, 0x342);
-		// Gmode, Att between IQKPLL and RX
-		// 0x83[16:10]=C2
-		// 0x83[9:8]=C1
-		// Gain~=C1/(C1+C2)
+
 		odm_set_rf_reg(dm, path, RF_0x83, 0x00300, 0x2);
 		odm_set_rf_reg(dm, path, RF_0x83, 0x1FC00, 0x7e);
-		// ====START : NCTL=====
-		odm_set_bb_reg(dm, 0x1b10, 0x000000FF, 0x00);
-		odm_set_bb_reg(dm, 0x1b34, 0x0000007C, 0x0D); // lna=0x6
-		odm_set_bb_reg(dm, 0x1bb8, BIT(20), 0x1); // r_tst_iqk2set = 0x1
-		odm_set_bb_reg(dm, 0x1bcc, 0x0000003F, 0x3f);
-		odm_set_bb_reg(dm, 0x1b2c, 0x0FFF0000, 0x044);// Rx_tone_idx=0x044 (4.25MHz)
-		if (odm_get_bb_reg(dm, R_0x2d9c, 0x000000FF) == 0x0) {
-			RF_DBG(dm, DBG_RF_IQK, "[IQK]START : NB RXIQK NCTL(one shot)!\n");
-			odm_set_bb_reg(dm, 0x1b00, 0x00001FFF, reg1b00);//set cal_path, process id
-			odm_set_bb_reg(dm, 0x1b00, BIT(0), 0x1);//one shot
-			while (i < 10) {
-				i++;
-				ODM_delay_ms(2);
-				if (odm_get_bb_reg(dm, R_0x2d9c, 0x000000FF) == 0x55) {
-					RF_DBG(dm, DBG_RF_IQK, "[IQK]NCTL FRxK done, delaytime = %d ms!\n", i * 2);
-					break;
-				}
+	} else {
+
+		odm_set_rf_reg(dm, RF_PATH_A, RF_0x00, 0x03FF0, 0x348);
+
+		odm_set_rf_reg(dm, path, RF_0x8c, 0x00180, 0x1);
+		odm_set_rf_reg(dm, path, RF_0x8c, 0x0007F, 0x07);
+	}
+	// ====START : NCTL=====
+	odm_set_bb_reg(dm, 0x1b10, 0x000000FF, 0x00);
+	odm_set_bb_reg(dm, 0x1b34, 0x0000007C, 0x0D); // lna=0x6
+	odm_set_bb_reg(dm, 0x1bb8, BIT(20), 0x1); // r_tst_iqk2set = 0x1
+	odm_set_bb_reg(dm, 0x1bcc, 0x0000003F, 0x3f);
+	odm_set_bb_reg(dm, 0x1b2c, 0x0FFF0000, 0x044);// Rx_tone_idx=0x044 (4.25MHz)
+	if (odm_get_bb_reg(dm, R_0x2d9c, 0x000000FF) == 0x0) {
+		RF_DBG(dm, DBG_RF_IQK, "[IQK]START : NB RXIQK NCTL(one shot)!\n");
+		odm_set_bb_reg(dm, 0x1b00, 0x00001FFF, reg1b00);//set cal_path, process id
+		odm_set_bb_reg(dm, 0x1b00, BIT(0), 0x1);//one shot
+		while (i < 10) {
+			i++;
+			ODM_delay_ms(2);
+			if (odm_get_bb_reg(dm, R_0x2d9c, 0x000000FF) == 0x55) {
+				RF_DBG(dm, DBG_RF_IQK, "[IQK]NCTL FRxK done, delaytime = %d ms!\n", i * 2);
+				break;
 			}
-			RF_DBG(dm, DBG_RF_IQK, "[IQK]END : NB RXIQK NCTL!\n");
-			RF_DBG(dm, DBG_RF_IQK, "[IQK]RXIQK PathB 1b08[26]= 0x%x!\n", odm_get_bb_reg(dm, 0x1b08, BIT(26)));
-			KFAIL = (u8)odm_get_bb_reg(dm, 0x1b08, BIT(26));
-			RF_DBG(dm, DBG_RF_IQK, "[IQK]RXIQK PathB large LNA %s!\n", (KFAIL == 0 ? "success" : "fail"));
-			//1b3c auto write!
-			if (!KFAIL) {
-				reg_1b3c = odm_get_bb_reg(dm, 0x1b3c, MASKDWORD);
-				RF_DBG(dm, DBG_RF_IQK, "[IQK]large LNA RXIQK,BBreg_1b3c= 0x%x\n", reg_1b3c);
-				iqk_info->rxxy[path][0][1] = (reg_1b3c & 0x7FF00000) >> 20;  //rx_x
-				iqk_info->rxxy[path][1][1] = (reg_1b3c & 0x0007FF00) >> 8 ;  //rx_y
-				iqk_info->iqk_fail_report[1][path][1] = true; //[RX][path][rxl]
-			} else {
-				iqk_info->iqk_fail_report[1][path][1] = false; //[RX][path][rxl]
-			}
+		}
+		RF_DBG(dm, DBG_RF_IQK, "[IQK]END : NB RXIQK NCTL!\n");
+		RF_DBG(dm, DBG_RF_IQK, "[IQK]RXIQK 1b08[26]= 0x%x!\n", odm_get_bb_reg(dm, 0x1b08, BIT(26)));
+		KFAIL = (u8)odm_get_bb_reg(dm, 0x1b08, BIT(26));
+		RF_DBG(dm, DBG_RF_IQK, "[IQK]RXIQK large LNA %s!\n", (KFAIL == 0 ? "success" : "fail"));
+		//1b3c auto write!
+		if (!KFAIL) {
+			reg_1b3c = odm_get_bb_reg(dm, 0x1b3c, MASKDWORD);
+			RF_DBG(dm, DBG_RF_IQK, "[IQK]large LNA RXIQK,BBreg_1b3c= 0x%x\n", reg_1b3c);
+			iqk_info->rxxy[path][0][1] = (reg_1b3c & 0x7FF00000) >> 20;  //rx_x
+			iqk_info->rxxy[path][1][1] = (reg_1b3c & 0x0007FF00) >> 8 ;  //rx_y
+			iqk_info->iqk_fail_report[1][path][1] = true; //[RX][path][rxl]
+		} else {
+			iqk_info->iqk_fail_report[1][path][1] = false; //[RX][path][rxl]
+		}
 		RF_DBG(dm, DBG_RF_IQK, "[IQK]rxxy[%d][0][1]= 0x%x\n", path, iqk_info->rxxy[path][0][1]);
 		RF_DBG(dm, DBG_RF_IQK, "[IQK]rxxy[%d][1][1]= 0x%x\n", path, iqk_info->rxxy[path][1][1]);
-
-		} else {
-			RF_DBG(dm, DBG_RF_IQK, "[IQK]Jump : NB RXIQK NCTL not ready!\n");
-			}
-		// =====Disable RXIQKPLL =====
-	odm_set_rf_reg(dm, path, RF_0x20, BIT(8), 0x0);
+	} else {
+		RF_DBG(dm, DBG_RF_IQK, "[IQK]Jump : NB RXIQK NCTL not ready!\n");
+	}
+	// =====Disable RXIQKPLL =====
+	if (iqk_info->iqk_band == 0) 
+		odm_set_rf_reg(dm, path, RF_0x20, BIT(8), 0x0);
+	else
+		odm_set_rf_reg(dm, path, RF_0x20, BIT(7), 0x0);
 		//1E[19]=POW_IQKPLL
 	odm_set_rf_reg(dm, path, RF_0x1e, BIT(19), 0x0);
 	
@@ -1402,6 +1417,10 @@ void _iq_calibrate_8733b_init(struct dm_struct *dm)
 			}
 		iqk_info->txxy[i][0] = 0x200;
 		iqk_info->txxy[i][1] = 0x000;
+		iqk_info->rxxy[i][0][0] = 0x200;
+		iqk_info->rxxy[i][1][0] = 0x000;
+		iqk_info->rxxy[i][0][1] = 0x200;
+		iqk_info->rxxy[i][1][1] = 0x000;
 		}
 
 		for (i = 0; i < 2; i++) { //i:band,j:path
@@ -1432,7 +1451,7 @@ void _phy_iq_calibrate_8733b(struct dm_struct *dm,
 	u32 MAC_backup[MAC_REG_NUM_8733B], BB_backup[BB_REG_NUM_8733B], RF_backup[RF_REG_NUM_8733B][RF_PATH_MAX_8733B];
 	u32 backup_mac_reg[MAC_REG_NUM_8733B] = {0x520};
 	u32 backup_bb_reg[BB_REG_NUM_8733B] = {0x09f0, 0x09b4, 0x1c38, 0x1860, 0x1cd0, 0x824, 0x2a24, 0x1d40, 0x1c20, 0x1880, 0x180c}; //?not sure
-	u32 backup_rf_reg[RF_REG_NUM_8733B] = {0x5, 0xde, 0xdf, 0xef};//0x0, 0x8f
+	u32 backup_rf_reg[RF_REG_NUM_8733B] = {0x5, 0xde, 0xdf, 0xef, 0x1f};//0x0, 0x8f
 	u32 temp0;
 	boolean is_mp = false;
 	boolean Kpass = true, Kpass_ab[2] = {true, true};

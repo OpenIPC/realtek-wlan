@@ -30,7 +30,7 @@
 /*--------------------------Define Parameters-------------------------------*/
 #define MAC_REG_NUM_8733B 1
 #define BB_REG_NUM_8733B 11
-#define RF_REG_NUM_8733B 4
+#define RF_REG_NUM_8733B 5
 #define IQK_DELAY_8733B 2
 #define IQK_STEP_8733B 3
 #define RXK_STEP_8733B 6

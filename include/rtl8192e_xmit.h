@@ -396,7 +396,7 @@ void rtl8192e_cal_txdesc_chksum(u8 *ptxdesc);
 	s32 rtl8192es_xmit_buf_handler(PADAPTER padapter);
 
 	#ifdef CONFIG_SDIO_TX_TASKLET
-		void rtl8192es_xmit_tasklet(void *priv);
+		void rtl8192es_xmit_tasklet(unsigned long priv);
 	#endif
 #endif
 

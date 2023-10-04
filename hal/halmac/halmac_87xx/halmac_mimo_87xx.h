@@ -20,6 +20,7 @@
 
 #if HALMAC_87XX_SUPPORT
 
+
 enum halmac_ret_status
 cfg_txbf_87xx(struct halmac_adapter *adapter, u8 userid, enum halmac_bw bw,
 	      u8 txbf_en);

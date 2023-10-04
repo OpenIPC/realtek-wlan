@@ -90,6 +90,8 @@
 
 #ifdef CONFIG_SINGLE_XMIT_BUF
 	#define NR_XMIT_EXTBUFF	(1)
+#elif defined(CONFIG_RTW_MGMT_QUEUE)
+	#define NR_XMIT_EXTBUFF	(64)
 #else
 	#define NR_XMIT_EXTBUFF	(32)
 #endif
@@ -100,6 +102,8 @@
 	#define MAX_CMDBUF_SZ	(128*70) /*(8960)*/
 #elif defined(CONFIG_RTL8822C) && defined(CONFIG_WAR_OFFLOAD)
 	#define MAX_CMDBUF_SZ	(128*128) /*(16k) */
+#elif defined(CONFIG_RTL8733B) && defined(CONFIG_WAR_OFFLOAD)
+	#define MAX_CMDBUF_SZ	(128*64) /*(8192) */
 #else
 	#define MAX_CMDBUF_SZ	(5120)	/* (4096) */
 #endif
@@ -194,6 +198,12 @@
 #else
 #define HWXMIT_ENTRY 4
 #endif
+
+enum DEQUEUE_TYPE {
+	UNI_BMC_DATA,
+	UNI_MGMT,
+	ALL_FRAME
+};
 
 /* For Buffer Descriptor ring architecture */
 #if defined(BUF_DESC_ARCH) || defined(CONFIG_TRX_BD_ARCH)
@@ -988,7 +998,7 @@ u8 mgmt_xmitframe_enqueue_for_sleeping_sta(_adapter *padapter, struct xmit_frame
 #endif
 sint xmitframe_enqueue_for_sleeping_sta(_adapter *padapter, struct xmit_frame *pxmitframe);
 void stop_sta_xmit(_adapter *padapter, struct sta_info *psta);
-void wakeup_sta_to_xmit(_adapter *padapter, struct sta_info *psta);
+void wakeup_sta_to_xmit(_adapter *padapter, struct sta_info *psta, u8 dequeue_type);
 void xmit_delivery_enabled_frames(_adapter *padapter, struct sta_info *psta);
 #endif
 

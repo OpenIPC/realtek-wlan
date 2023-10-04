@@ -1159,7 +1159,7 @@ u8 rtw_joinbss_cmd(_adapter  *padapter, struct wlan_network *pnetwork)
 #endif
 #endif /* CONFIG_80211N_HT */
 
-	rtw_append_exented_cap(padapter, &psecnetwork->IEs[0], &psecnetwork->IELength);
+	rtw_append_extended_cap(padapter, &psecnetwork->IEs[0], &psecnetwork->IELength);
 
 #ifdef CONFIG_RTW_80211R
 	rtw_ft_validate_akm_type(padapter, pnetwork);
@@ -2107,6 +2107,80 @@ exit:
 	return res;
 }
 
+u8 rtw_set_ap_csa_cmd(_adapter *adapter)
+{
+	u8 res = _SUCCESS;
+#ifdef CONFIG_AP_MODE
+	struct cmd_obj *cmdobj;
+	struct cmd_priv *cmdpriv = &adapter->cmdpriv;
+
+	RTW_INFO("%s\n", __FUNCTION__);
+
+	cmdobj = rtw_zmalloc(sizeof(struct cmd_obj));
+	if (cmdobj == NULL) {
+		res = _FAIL;
+		goto exit;
+	}
+
+	init_h2fwcmd_w_parm_no_parm_rsp(cmdobj, CMD_AP_CHANSWITCH);
+	res = rtw_enqueue_cmd(cmdpriv, cmdobj);
+
+exit:
+#endif /* CONFIG_AP_MODE */
+	return res;
+}
+
+/* control = 0 means stop beacon, control = 1 means resume beacon */
+u8 bcn_control_cmd(_adapter *adapter, u8 control)
+{
+	u8 res = _SUCCESS;
+#ifdef CONFIG_AP_MODE
+	struct cmd_obj *cmdobj;
+	struct cmd_priv *cmdpriv = &adapter->cmdpriv;
+	struct bcn_control_param *param;
+
+	RTW_INFO(FUNC_ADPT_FMT" : %s beacon\n",
+		FUNC_ADPT_ARG(adapter), control ? "resume" : "stop");
+
+	cmdobj = rtw_zmalloc(sizeof(struct cmd_obj));
+	if (cmdobj == NULL) {
+		res = _FAIL;
+		goto exit;
+	}
+
+	param = rtw_zmalloc(sizeof(struct bcn_control_param));
+	if (param == NULL) {
+		rtw_mfree((u8 *)cmdobj, sizeof(struct cmd_obj));
+		res = _FAIL;
+		goto exit;
+	}
+
+	param->control = control;
+	init_h2fwcmd_w_parm_no_rsp(cmdobj, param, CMD_BCN_CONTROL);
+	res = rtw_enqueue_cmd(cmdpriv, cmdobj);
+exit:
+#endif
+	return res;
+}
+
+u8 rtw_csa_sta_update_cap_cmd(_adapter *adapter)
+{
+	u8 res = _SUCCESS;
+	struct cmd_obj *cmdobj;
+	struct cmd_priv *cmdpriv = &adapter->cmdpriv;
+
+	cmdobj = rtw_zmalloc(sizeof(struct cmd_obj));
+	if (cmdobj == NULL) {
+		res = _FAIL;
+		goto exit;
+	}
+
+	init_h2fwcmd_w_parm_no_parm_rsp(cmdobj, CMD_STA_CSA_UPDATE_CAP);
+	res = rtw_enqueue_cmd(cmdpriv, cmdobj);
+exit:
+	return res;
+}
+
 u8 rtw_tdls_cmd(_adapter *padapter, u8 *addr, u8 option)
 {
 	u8 res = _SUCCESS;
@@ -2991,6 +3065,9 @@ void rtw_iface_dynamic_chk_wk_hdl(_adapter *padapter)
 }
 void rtw_dynamic_chk_wk_hdl(_adapter *padapter)
 {
+#ifdef RTW_DETECT_TRX_HANG_JG3
+	rtw_hal_get_hwreg(padapter, HW_VAR_DETECT_TRX_HANG_JG3, 0);
+#endif
 	rtw_mi_dynamic_chk_wk_hdl(padapter);
 #ifdef CONFIG_MP_INCLUDED
 	if (rtw_mp_mode_check(padapter) == _FALSE)
@@ -3036,6 +3113,10 @@ void rtw_dynamic_chk_wk_hdl(_adapter *padapter)
 #endif /* CONFIG_MCC_MODE */
 
 	rtw_hal_periodic_tsf_update_chk(padapter);
+
+#ifdef RTW_DETECT_HANG
+	rtw_hal_is_hang_check(padapter);
+#endif /* RTW_DETECT_HANG */
 }
 
 #ifdef CONFIG_LPS
@@ -3717,7 +3798,8 @@ void rtw_dfs_ch_switch_hdl(struct dvobj_priv *dvobj)
 	u8 ifbmp_m = rtw_mi_get_ap_mesh_ifbmp(pri_adapter);
 	u8 ifbmp_s = rtw_mi_get_ld_sta_ifbmp(pri_adapter);
 	s16 req_ch;
-	u8 req_bw = CHANNEL_WIDTH_20, req_offset = HAL_PRIME_CHNL_OFFSET_DONT_CARE;
+	u8 req_bw = CHANNEL_WIDTH_20, req_offset = HAL_PRIME_CHNL_OFFSET_DONT_CARE, csa_timer = _FALSE;
+	u8 need_discon = _FALSE;
 
 	rtw_hal_macid_sleep_all_used(pri_adapter);
 
@@ -3727,9 +3809,11 @@ void rtw_dfs_ch_switch_hdl(struct dvobj_priv *dvobj)
 		/* CSA channel available and valid */
 		req_ch = rfctl->csa_ch;
 		RTW_INFO("%s valid CSA ch%u\n", __func__, rfctl->csa_ch);
+		csa_timer = _TRUE;
 	} else if (ifbmp_m) {
 		/* no available or valid CSA channel, having AP/MESH ifaces */
 		req_ch = REQ_CH_NONE;
+		need_discon = _TRUE;
 		RTW_INFO("%s ch sel by AP/MESH ifaces\n", __func__);
 	} else {
 		/* no available or valid CSA channel and no AP/MESH ifaces */
@@ -3741,32 +3825,36 @@ void rtw_dfs_ch_switch_hdl(struct dvobj_priv *dvobj)
 			req_ch = 36;
 		else
 			req_ch = 1;
-		RTW_INFO("%s switch to ch%d\n", __func__, req_ch);
+		need_discon = _TRUE;
+		RTW_INFO("%s switch to ch%d, then disconnect with AP\n", __func__, req_ch);
 	}
 
-	/* only support 80 Mhz so far */
-	if(rfctl->csa_ch_width == 1 || rfctl->csa_ch_width == 2 || rfctl->csa_ch_width == 3) {
-		if (rtw_get_offset_by_chbw(req_ch, CHANNEL_WIDTH_80, &req_offset)) {
-			req_bw = CHANNEL_WIDTH_80;
-		} else {
+	if (!need_discon) {
+		/* fault tolerant for AP */
+		if(rfctl->csa_ch_width == 1 || rfctl->csa_ch_width == 2 || rfctl->csa_ch_width == 3) {
+			if (rtw_get_offset_by_chbw(req_ch, CHANNEL_WIDTH_80, &req_offset)) {
+				/*  always use 80 Mhz to connect if ch/bw/offset is valid */
+				req_bw = CHANNEL_WIDTH_80;
+			} else {
+				req_bw = CHANNEL_WIDTH_20;
+				req_offset = HAL_PRIME_CHNL_OFFSET_DONT_CARE;
+			}
+		} else if(rfctl->csa_ch_offset == 1) {
+			req_bw = CHANNEL_WIDTH_40;
+			req_offset = HAL_PRIME_CHNL_OFFSET_LOWER;
+		} else if(rfctl->csa_ch_offset == 3) {
+			req_bw = CHANNEL_WIDTH_40;
+			req_offset = HAL_PRIME_CHNL_OFFSET_UPPER;
+		} else{
 			req_bw = CHANNEL_WIDTH_20;
 			req_offset = HAL_PRIME_CHNL_OFFSET_DONT_CARE;
 		}
-	} else if(rfctl->csa_ch_offset == 1) {
-		req_bw = CHANNEL_WIDTH_40;
-		req_offset = HAL_PRIME_CHNL_OFFSET_LOWER;
-	} else if(rfctl->csa_ch_offset == 3) {
-		req_bw = CHANNEL_WIDTH_40;
-		req_offset = HAL_PRIME_CHNL_OFFSET_UPPER;
-	} else{
-		req_bw = CHANNEL_WIDTH_20;
-		req_offset = HAL_PRIME_CHNL_OFFSET_DONT_CARE;
 	}
 
 	RTW_INFO("req_ch=%d, req_bw=%d, req_offset=%d, ifbmp_m=0x%02x, ifbmp_s=0x%02x\n"
 		, req_ch, req_bw, req_offset, ifbmp_m, ifbmp_s);
 
-	/*  update ch, bw, offset for all asoc STA ifaces */
+	/* check all STA ifaces status */
 	if (ifbmp_s) {
 		_adapter *iface;
 		int i;
@@ -3775,19 +3863,25 @@ void rtw_dfs_ch_switch_hdl(struct dvobj_priv *dvobj)
 			iface = dvobj->padapters[i];
 			if (!iface || !(ifbmp_s & BIT(iface->iface_id)))
 				continue;
-			
-			/* update STA mode ch/bw/offset */
-			iface->mlmeextpriv.cur_channel = req_ch;
-			iface->mlmeextpriv.cur_bwmode = req_bw;
-			iface->mlmeextpriv.cur_ch_offset = req_offset;
-			/* updaet STA mode DSConfig , ap mode will update in rtw_change_bss_chbw_cmd */
-			iface->mlmepriv.cur_network.network.Configuration.DSConfig = req_ch;
-			set_fwstate(&iface->mlmepriv, WIFI_CSA_UPDATE_BEACON);
+
+			if (need_discon) {
+				/* CSA channel not available or not valid, then disconnect */
+				set_fwstate(&iface->mlmepriv,  WIFI_OP_CH_SWITCHING);
+				issue_deauth(iface, get_bssid(&iface->mlmepriv), WLAN_REASON_DEAUTH_LEAVING);
+			} else {
+				/* update STA mode ch/bw/offset */
+				iface->mlmeextpriv.cur_channel = req_ch;
+				iface->mlmeextpriv.cur_bwmode = req_bw;
+				iface->mlmeextpriv.cur_ch_offset = req_offset;
+				/* updaet STA mode DSConfig , ap mode will update in rtw_change_bss_chbw_cmd */
+				iface->mlmepriv.cur_network.network.Configuration.DSConfig = req_ch;
+				set_fwstate(&iface->mlmepriv, WIFI_CSA_UPDATE_BEACON);
+			}
 			
 		}
 	}
 
-	if (rfctl->csa_ch > 0) {
+	if (csa_timer) {
 		RTW_INFO("pmlmeext->csa_timer 70 seconds\n");
 		/* wait 70 seconds for receiving beacons */
 		_set_timer(&pmlmeext->csa_timer, CAC_TIME_MS + 10000);
@@ -3795,16 +3889,23 @@ void rtw_dfs_ch_switch_hdl(struct dvobj_priv *dvobj)
 
 #ifdef CONFIG_AP_MODE
 	if (ifbmp_m) {
+		u8 execlude = 0;
+
+		if (need_discon)
+			execlude = ifbmp_s;
 		/* trigger channel selection with consideraton of asoc STA ifaces */
 		rtw_change_bss_chbw_cmd(dvobj_get_primary_adapter(dvobj), RTW_CMDF_DIRECTLY
-			, ifbmp_m, 0, req_ch, REQ_BW_ORI, REQ_OFFSET_NONE);
+			, ifbmp_m, execlude, req_ch, REQ_BW_ORI, REQ_OFFSET_NONE);
 	} else
 #endif
 	{
 		/* no AP/MESH iface, switch DFS status and channel directly */
 		rtw_warn_on(req_ch <= 0);
 		#ifdef CONFIG_DFS_MASTER
-		rtw_dfs_rd_en_decision(pri_adapter, MLME_OPCH_SWITCH, 0);
+		if (need_discon)
+			rtw_dfs_rd_en_decision(pri_adapter, MLME_OPCH_SWITCH, ifbmp_s);
+		else
+			rtw_dfs_rd_en_decision(pri_adapter, MLME_OPCH_SWITCH, 0);
 		#endif
 		LeaveAllPowerSaveModeDirect(pri_adapter);
 		set_channel_bwmode(pri_adapter, req_ch, req_offset, req_bw);
@@ -3812,7 +3913,23 @@ void rtw_dfs_ch_switch_hdl(struct dvobj_priv *dvobj)
 		rtw_mi_update_union_chan_inf(pri_adapter, req_ch, req_offset, req_bw);
 		rtw_rfctl_update_op_mode(rfctl, 0, 0);
 	}
-	
+
+	/* make asoc STA ifaces disconnect */
+	if (ifbmp_s && need_discon) {
+		_adapter *iface;
+		int i;
+
+		for (i = 0; i < dvobj->iface_nums; i++) {
+			iface = dvobj->padapters[i];
+			if (!iface || !(ifbmp_s & BIT(iface->iface_id)))
+				continue;
+			rtw_disassoc_cmd(iface, 0, RTW_CMDF_DIRECTLY);
+			rtw_indicate_disconnect(iface, 0, _FALSE);
+			rtw_free_assoc_resources(iface, _TRUE);
+			rtw_free_network_queue(iface, _TRUE);
+		}
+	}
+
 	rfctl->csa_ch = 0;
 	rfctl->csa_switch_cnt = 0;
 	rfctl->csa_ch_offset = 0;

@@ -52,7 +52,7 @@
 #ifdef CONFIG_WOW_PATTERN_HW_CAM	/* Frame Mask Cam number for pattern match */
 #define MAX_WKFM_CAM_NUM	12
 #else
-#define MAX_WKFM_CAM_NUM	10
+#define MAX_WKFM_CAM_NUM	16
 #endif
 
 #define MAX_WKFM_SIZE	16 /* (16 bytes for WKFM bit mask, 16*8 = 128 bits) */

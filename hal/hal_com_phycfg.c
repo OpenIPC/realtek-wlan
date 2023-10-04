@@ -1538,7 +1538,8 @@ bool rtw_regsty_chk_target_tx_power_valid(_adapter *adapter)
 
 				target = rtw_regsty_get_target_tx_power(adapter, band, path, rs);
 				if (target == -1) {
-					RTW_PRINT("%s return _FALSE for band:%d, path:%d, rs:%d, t:%d\n", __func__, band, path, rs, target);
+					// Target tx power will be set from rate
+					RTW_DBG("%s return _FALSE for band:%d, path:%d, rs:%d, t:%d\n", __func__, band, path, rs, target);
 					return _FALSE;
 				}
 			}

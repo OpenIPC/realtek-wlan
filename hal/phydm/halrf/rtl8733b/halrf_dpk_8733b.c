@@ -38,7 +38,7 @@
 
 /*---------------------------Define Local Constant---------------------------*/
 
-/*8733B DPK ver:0x11 20210202*/
+/*8733B DPK ver:0x14 20220127*/
 
 void _backup_mac_bb_registers_8733b(struct dm_struct *dm,
 				    u32 *reg,
@@ -135,7 +135,7 @@ void _dpk_information_8733b(struct dm_struct *dm)
 	dpk_info->dpk_bw = (u8)((reg_rf18 & BIT(10)) >> 10); /*1/0:20/40*/
 
 	RF_DBG(dm, DBG_RF_DPK,
-	       "[DPK] Drv cut vision = 0x11, update time 20210202\n");
+	       "[DPK] Drv cut vision = 0x14, update time 20220127\n");
 	RF_DBG(dm, DBG_RF_DPK,
 	       "[DPK] RFE TYPE = 0x%x\n", dm->rfe_type);
 
@@ -429,7 +429,8 @@ void _dpk_mac_bb_setting_8733b(struct dm_struct *dm)
 
 	if (dpk_info->is_tssi_mode) {
 		btc_set_gnt_wl_bt_8733b(dm, true);
-		odm_set_bb_reg(dm, R_0x1b20, 0x0F000000, 0x0); // disable DPD
+		_dpk_tx_pause_8733b(dm);
+		odm_set_bb_reg(dm, R_0x1b20, 0x0F000000, 0x0); // DPD off
 		_dpk_get_tssi_mode_txagc(dm);
 		odm_set_bb_reg(dm, R_0x4384, BIT(30), 0x1);//PAUSE TSSI
 		btc_set_gnt_wl_bt_8733b(dm, false);
@@ -517,7 +518,7 @@ u8 _dpk_rf_setting_8733b(struct dm_struct *dm,	u8 path)
 	} else { /*5G*//*TSSI track 16dbm*/
 
 		/*TXAGC */
-		odm_set_rf_reg(dm, (enum rf_path)path, RF_0x1, 0xff, txagc + 4);
+		odm_set_rf_reg(dm, (enum rf_path)path, RF_0x1, 0xff, txagc + 6);
 		/*ATT Gain 000~111=-27.3db ~-36.7dB*/
 		//odm_set_rf_reg(dm, (enum rf_path)path, RF_0x8c, 0x0e000, 0x7);
 		/*C-CUT value*/
@@ -571,7 +572,7 @@ u8 _dpk_timing_sync_report_8733b(struct dm_struct *dm,	u8 path)
 	} else {
 		count = 0;
 		fail_report = odm_get_bb_reg(dm, R_0x1b08, BIT(26)) & 0x1;
-		while (fail_report != 0x0 && count < 200) {
+		while (fail_report != 0x0 && count < 100) {
 			ODM_delay_us(10);
 			if ((u8)odm_get_bb_reg(dm, R_0x1b08, BIT(26)) == 0x0)
 				fail_report = 0;
@@ -624,7 +625,7 @@ u8 _dpk_one_shot_8733b(struct dm_struct *dm, u8 path, u8 action)
 		break;
 	}
 
-	for (retry_cnt = 0; retry_cnt < 2; retry_cnt++) {
+	for (retry_cnt = 0; retry_cnt < 1; retry_cnt++) {
 		/*one shot*/
 		odm_write_2byte(dm, R_0x1b00, shot_code);
 		RF_DBG(dm, DBG_RF_DPK, "[DPK] one-shot = %x\n",
@@ -643,7 +644,7 @@ u8 _dpk_one_shot_8733b(struct dm_struct *dm, u8 path, u8 action)
 		if (result == 0)
 			break;
 
-		RF_DBG(dm, DBG_RF_DPK, "[DPK] one-shot retry!!!!\n");
+		//RF_DBG(dm, DBG_RF_DPK, "[DPK] one-shot retry!!!!\n");
 	}
 
 	btc_set_gnt_wl_bt_8733b(dm, false);
@@ -1057,12 +1058,13 @@ u8 _dpk_gainloss_8733b(struct dm_struct *dm,	u8 path)
 	/*RXIQC fill default value*/
 	odm_set_bb_reg(dm, R_0x1b3c, 0xFFFFFF00, 0x200000);
 
-	odm_write_1byte(dm, R_0x1be3, 0x20); /*bypass RX DC_i/q*/
+	//odm_write_1byte(dm, R_0x1be3, 0x20); /*bypass RX DC_i/q*/
 	odm_set_bb_reg(dm, R_0x1b88, MASKDWORD, 0x00b48000);
 
 	agc_done = _dpk_gainloss_auto_agc_8733b(dm, path, ori_txagc);
 
 	if (agc_done == 0) {
+		_dpk_pas_read_8733b(dm, path);
 		_dpk_dbg_report_read_8733b(dm, 0x01); /*LUT_gain*/
 		_dpk_dbg_report_read_8733b(dm, 0x02); /*pag2*/
 		_dpk_dbg_report_read_8733b(dm, 0x0C);
@@ -1474,7 +1476,7 @@ void dpk_track_8733b(void *dm_void)
 #if 1
 		if (dpk_info->is_tssi_mode)
 			dpk_info->dpk_delta_thermal[path] =
-				2 * (dpk_info->thermal_init[path] - dpk_info->thermal_dpk[path]);
+				dpk_info->thermal_init[path] - dpk_info->thermal_dpk[path];
 		else
 #endif
 			dpk_info->dpk_delta_thermal[path] =

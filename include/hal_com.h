@@ -427,6 +427,9 @@ void rtw_hal_update_tx_aclt(_adapter *adapter);
 #endif
 
 void hw_var_port_switch(_adapter *adapter);
+#ifdef CONFIG_FW_MULTI_PORT_SUPPORT
+u8 rtw_hal_set_ap_bcn_imr_cmd(struct _ADAPTER *adapter, u8 enable);
+#endif
 void rtw_var_set_basic_rate(PADAPTER padapter, u8 *val);
 u8 SetHwReg(PADAPTER padapter, u8 variable, u8 *val);
 void GetHwReg(PADAPTER padapter, u8 variable, u8 *val);
@@ -734,3 +737,7 @@ static inline bool rtw_assert_protsel_macsleep(_adapter *padapter, u32 addr, u8 
 static inline void rtw_leave_protsel_macsleep(_adapter *padapter) {}
 #endif
 #endif /* __HAL_COMMON_H__ */
+
+#ifdef RTW_DETECT_HANG
+void rtw_hal_is_hang_check(_adapter *padapter);
+#endif

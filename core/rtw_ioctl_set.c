@@ -137,8 +137,17 @@ u8 rtw_do_join(_adapter *padapter)
 		_exit_critical_bh(&(pmlmepriv->scanned_queue.lock), &irqL);
 		select_ret = rtw_select_and_join_from_scanned_queue(pmlmepriv);
 		if (select_ret == _SUCCESS) {
+			u32 join_timeout = MAX_JOIN_TIMEOUT;
+
+#if defined(CONFIG_CONCURRENT_MODE) && defined(CONFIG_AP_MODE)
+			struct rf_ctl_t *rfctl;
+			rfctl = adapter_to_rfctl(padapter);
+			if (rfctl->ap_csa_en == CSA_STA_JOINBSS)
+				join_timeout += (rfctl->ap_csa_switch_cnt * 100);
+#endif
+
 			pmlmepriv->to_join = _FALSE;
-			_set_timer(&pmlmepriv->assoc_timer, MAX_JOIN_TIMEOUT);
+			_set_timer(&pmlmepriv->assoc_timer, join_timeout);
 		} else {
 			if (check_fwstate(pmlmepriv, WIFI_ADHOC_STATE) == _TRUE) {
 				#ifdef CONFIG_AP_MODE

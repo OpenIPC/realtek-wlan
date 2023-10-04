@@ -249,7 +249,7 @@ extern uint rtw_drv_log_level;
 #define RTW_PRINT_SEL(sel, fmt, arg...) \
 	do {\
 		if (sel == RTW_DBGDUMP)\
-			RTW_PRINT(fmt, ##arg); \
+			RTW_DBG(fmt, ##arg); \
 		else {\
 			_seqdump(sel, fmt, ##arg) /*rtw_warn_on(1)*/; \
 		} \
@@ -269,10 +269,10 @@ extern uint rtw_drv_log_level;
 /* dump message to selected 'stream' */
 #undef RTW_DUMP_SEL
 #define RTW_DUMP_SEL(sel, _HexData, _HexDataLen) \
-	RTW_BUF_DUMP_SEL(_DRV_ALWAYS_, sel, NULL, _FALSE, _HexData, _HexDataLen)
+	RTW_BUF_DUMP_SEL(_DRV_DEBUG_, sel, NULL, _FALSE, _HexData, _HexDataLen)
 
 #define RTW_MAP_DUMP_SEL(sel, _TitleString, _HexData, _HexDataLen) \
-	RTW_BUF_DUMP_SEL(_DRV_ALWAYS_, sel, _TitleString, _TRUE, _HexData, _HexDataLen)
+	RTW_BUF_DUMP_SEL(_DRV_DEBUG_, sel, _TitleString, _TRUE, _HexData, _HexDataLen)
 #endif /* defined(_seqdump) */
 
 
@@ -678,6 +678,11 @@ int proc_get_smps(struct seq_file *m, void *v);
 
 int proc_get_defs_param(struct seq_file *m, void *v);
 ssize_t proc_set_defs_param(struct file *file, const char __user *buffer, size_t count, loff_t *pos, void *data);
+
+#if defined(CONFIG_CONCURRENT_MODE) && defined(CONFIG_AP_MODE)
+ssize_t proc_set_ap_csa_cnt(struct file *file, const char __user *buffer, size_t count, loff_t *pos, void *data);
+int proc_get_ap_csa_cnt(struct seq_file *m, void *v);
+#endif
 
 #define _drv_always_		1
 #define _drv_emerg_			2

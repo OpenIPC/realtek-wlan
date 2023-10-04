@@ -41,7 +41,7 @@ const char *rtw_log_level_str[] = {
 
 void dump_drv_version(void *sel)
 {
-	RTW_PRINT_SEL(sel, "%s %s\n", DRV_NAME, DRIVERVERSION);
+	RTW_PRINT("%s %s\n", DRV_NAME, DRIVERVERSION);
 	RTW_PRINT_SEL(sel, "build time: %s %s\n", __DATE__, __TIME__);
 }
 
@@ -56,8 +56,15 @@ extern uint rtw_recvbuf_nr;
 	RTW_PRINT_SEL(sel, "\nKernel Version: %s\n", kernel_version);
 #endif
 
+#ifdef CONFIG_RTW_ANDROID
+	RTW_PRINT_SEL(sel, "Android Driver: %d\n", CONFIG_RTW_ANDROID);
+#else
+	RTW_PRINT_SEL(sel, "Linux Driver: \n");
+#endif /* CONFIG_RTW_ANDROID */
+
 	RTW_PRINT_SEL(sel, "Driver Version: %s\n", DRIVERVERSION);
 	RTW_PRINT_SEL(sel, "------------------------------------------------\n");
+
 #ifdef CONFIG_IOCTL_CFG80211
 	RTW_PRINT_SEL(sel, "CFG80211\n");
 #ifdef RTW_USE_CFG80211_STA_EVENT
@@ -2645,6 +2652,9 @@ int proc_get_trx_info(struct seq_file *m, void *v)
 
 #ifdef CONFIG_USB_HCI
 	RTW_PRINT_SEL(m, "rx_urb_pending_cn=%d\n", ATOMIC_READ(&(precvpriv->rx_pending_cnt)));
+#ifdef CONFIG_USB_PROTECT_RX_CLONED_SKB
+	RTW_PRINT_SEL(m, "rx_cloned_skb_pending_cn=%d\n", skb_queue_len(&precvpriv->rx_cloned_skb_queue));
+#endif
 #endif
 
 	dump_rx_bh_tk(m, &GET_PRIMARY_ADAPTER(padapter)->recvpriv);
@@ -8243,6 +8253,65 @@ int proc_get_smps(struct seq_file *m, void *v)
 	return 0;
 }
 #endif /*CONFIG_SUPPORT_STATIC_SMPS*/
+
+#if defined(CONFIG_CONCURRENT_MODE) && defined(CONFIG_AP_MODE)
+ssize_t proc_set_ap_csa_cnt(struct file *file, const char __user *buffer, size_t count, loff_t *pos, void *data)
+{
+	struct net_device *dev = data;
+	_adapter *adapter = (_adapter *)rtw_netdev_priv(dev);
+	struct rf_ctl_t *rfctl;
+	char tmp[6];
+	u8 ap_csa_cnt;
+	rfctl = adapter_to_rfctl(adapter);
+
+	if (buffer == NULL) {
+		RTW_INFO("input buffer is NULL!\n");
+		return -EFAULT;
+	}
+
+	if (count < 1) {
+		RTW_INFO("input length is 0!\n");
+		return -EFAULT;
+	}
+
+	if (count > sizeof(tmp)) {
+		RTW_INFO("input length is too large\n");
+		rtw_warn_on(1);
+		return -EFAULT;
+	}
+
+	if (buffer && !copy_from_user(tmp, buffer, count)) {
+		int num = sscanf(tmp, "%hhu", &ap_csa_cnt);
+
+		if (num < 1) {
+			RTW_INFO("input parameters < 1\n");
+			return -EINVAL;
+		}
+
+		if (ap_csa_cnt > MAX_CSA_CNT) {
+			RTW_INFO("ap_csa_cnt can't set more than %u, so driver force ap_csa_cnt to %u.\n", MAX_CSA_CNT, MAX_CSA_CNT);
+			ap_csa_cnt = MAX_CSA_CNT;
+		}
+
+		RTW_INFO("set rfctl->ap_csa_cnt_input to %u\n", ap_csa_cnt);
+		rfctl->ap_csa_cnt_input = ap_csa_cnt;
+	}
+
+	return count;
+}
+
+int proc_get_ap_csa_cnt(struct seq_file *m, void *v)
+{
+	struct net_device *dev = m->private;
+	_adapter *adapter = (_adapter *)rtw_netdev_priv(dev);
+	struct rf_ctl_t *rfctl;
+	rfctl = adapter_to_rfctl(adapter);
+
+	RTW_PRINT_SEL(m, "ap_csa_switch_cnt = %u\n", rfctl->ap_csa_cnt_input);
+
+	return 0;
+}
+#endif
 
 #endif /* CONFIG_PROC_DEBUG */
 #define RTW_BUFDUMP_BSIZE		16

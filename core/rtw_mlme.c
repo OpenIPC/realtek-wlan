@@ -880,16 +880,29 @@ void update_network(WLAN_BSSID_EX *dst, WLAN_BSSID_EX *src,
 		ss_final = padapter->recvpriv.signal_strength;
 		sq_final = padapter->recvpriv.signal_qual;
 		/* the rssi value here is undecorated, and will be used for antenna diversity */
-		if (sq_smp != 101) /* from the right channel */
+		/* Don't update the RSSI average with scan result which RSSI is -110 */
+		if ((sq_smp != 101) && (src->Rssi != -110)) { /* from the right channel */
 			rssi_final = (src->Rssi + dst->Rssi * 4) / 5;
-		else
+		} else {
+			#ifdef DBG_SITESURVEY
+			if (src->Rssi == -110)
+				RTW_INFO("Don't update RSSI average of associated network %s " \
+					"with scan result which RSSI is -110\n", src->Ssid.Ssid);
+			#endif
 			rssi_final = rssi_ori;
+		}
 	} else {
-		if (sq_smp != 101) { /* from the right channel */
+		/* Don't update the RSSI average with scan result which RSSI is -110 */
+		if ((sq_smp != 101) && (src->Rssi != -110)) { /* from the right channel */
 			ss_final = ((u32)(src->PhyInfo.SignalStrength) + (u32)(dst->PhyInfo.SignalStrength) * 4) / 5;
 			sq_final = ((u32)(src->PhyInfo.SignalQuality) + (u32)(dst->PhyInfo.SignalQuality) * 4) / 5;
 			rssi_final = (src->Rssi + dst->Rssi * 4) / 5;
 		} else {
+			#ifdef DBG_SITESURVEY
+			if (src->Rssi == -110)
+				RTW_INFO("Don't update RSSI average of network %s " \
+					"with scan result which RSSI is -110\n", src->Ssid.Ssid);
+			#endif
 			/* bss info not receving from the right channel, use the original RX signal infos */
 			ss_final = dst->PhyInfo.SignalStrength;
 			sq_final = dst->PhyInfo.SignalQuality;
@@ -1065,6 +1078,15 @@ bool rtw_update_scanned_network(_adapter *adapter, WLAN_BSSID_EX *target)
 	 * with this beacon's information */
 	/* if (rtw_end_of_queue_search(phead,plist)== _TRUE) { */
 	if (!target_find) {
+
+		/* Drop the scan result which RSSI is -110, means this packet's RSSI is 0 */
+		if (target->Rssi == -110) {
+			#ifdef DBG_SITESURVEY
+			RTW_INFO("Don't add network %s which RSSI is -110\n", target->Ssid.Ssid);
+			#endif
+			goto unlock_scan_queue;
+		}
+
 		if (_rtw_queue_empty(&(pmlmepriv->free_bss_pool)) == _TRUE) {
 			/* If there are no more slots, expire the choice */
 			/* list_del_init(&choice->list); */
@@ -4546,6 +4568,36 @@ candidate_exist:
 	}
 #endif
 	set_fwstate(pmlmepriv, WIFI_UNDER_LINKING);
+
+#if defined(CONFIG_CONCURRENT_MODE) && defined(CONFIG_AP_MODE)
+{
+	u8 ifbmp = 0;
+	u8 csa_cnt;
+	struct mi_state mstate;
+	struct rf_ctl_t *rfctl;
+
+	rfctl = adapter_to_rfctl(adapter);
+	csa_cnt = rfctl->ap_csa_cnt_input;
+	ifbmp = rtw_mi_get_ap_mesh_ifbmp(adapter);
+	rtw_mi_status_no_self(adapter, &mstate);
+
+	if (csa_cnt > 0 && ifbmp && MSTATE_AP_LD_NUM(&mstate) &&
+		rtw_mi_get_union_chan(adapter) != candidate->network.Configuration.DSConfig) {
+		rfctl->ap_csa_en = CSA_STA_JOINBSS;
+		rfctl->ap_csa_wait_update_bcn = 0;
+		rfctl->ap_csa_switch_cnt = csa_cnt;
+		rtw_bss_get_chbw(&(candidate->network), &rfctl->ap_csa_ch
+			, &rfctl->ap_csa_ch_width, &rfctl->ap_csa_ch_offset, 1, 1);
+		rtw_set_ap_csa_cmd(adapter);
+
+		/* Store candidata network until softap switch channel done */
+		_rtw_memcpy(&(pmlmepriv->candidate_network), candidate, sizeof(struct wlan_network));
+		ret = _SUCCESS;
+		goto exit;
+	}
+}
+#endif
+
 	ret = rtw_joinbss_cmd(adapter, candidate);
 
 exit:
@@ -5006,6 +5058,14 @@ sint rtw_restruct_sec_ie(_adapter *adapter, u8 *out_ie)
 	if (authmode == WLAN_EID_RSN) {
 		iEntry = SecIsInPMKIDList(adapter, pmlmepriv->assoc_bssid);
 		ielength = rtw_rsn_sync_pmkid(adapter, out_ie, ielength, iEntry);
+	}
+
+	if ((psecuritypriv->rsnx_ie_len >= 3)) {
+		u8 *_pos = out_ie + (psecuritypriv->supplicant_ie[1] + 2);
+		_rtw_memcpy(_pos, psecuritypriv->rsnx_ie,
+			psecuritypriv->rsnx_ie_len);
+		ielength += psecuritypriv->rsnx_ie_len;
+		RTW_INFO_DUMP("update IE for RSNX :", out_ie, ielength);
 	}
 
 	return ielength;
@@ -5719,38 +5779,39 @@ void rtw_issue_addbareq_cmd(_adapter *padapter, struct xmit_frame *pxmitframe, u
 
 }
 #endif /* CONFIG_80211N_HT */
-void rtw_append_exented_cap(_adapter *padapter, u8 *out_ie, uint *pout_len)
+void rtw_append_extended_cap(_adapter *padapter, u8 *out_ie, uint *pout_len)
 {
-	struct mlme_priv	*pmlmepriv = &padapter->mlmepriv;
-	struct ht_priv		*phtpriv = &pmlmepriv->htpriv;
+	struct mlme_priv *pmlmepriv = &padapter->mlmepriv;
+	struct ht_priv *phtpriv = &pmlmepriv->htpriv;
 #ifdef CONFIG_80211AC_VHT
-	struct vht_priv	*pvhtpriv = &pmlmepriv->vhtpriv;
+	struct vht_priv *pvhtpriv = &pmlmepriv->vhtpriv;
 #endif /* CONFIG_80211AC_VHT */
-	u8	cap_content[8] = { 0 };
-	u8	*pframe;
-	u8   null_content[8] = {0};
+	u8 *ext_cap_data = pmlmepriv->ext_capab_ie_data;
+	u8 *ext_cap_data_len = &(pmlmepriv->ext_capab_ie_len);
 
 	if (phtpriv->bss_coexist)
-		SET_EXT_CAPABILITY_ELE_BSS_COEXIST(cap_content, 1);
-
+		rtw_add_ext_cap_info(ext_cap_data, ext_cap_data_len, BSS_COEXT);
+#ifdef CONFIG_ECSA
+	rtw_add_ext_cap_info(ext_cap_data, ext_cap_data_len, EXT_CH_SWITCH);
+#endif
 #ifdef CONFIG_80211AC_VHT
 	if (pvhtpriv->vht_option)
-		SET_EXT_CAPABILITY_ELE_OP_MODE_NOTIF(cap_content, 1);
+		rtw_add_ext_cap_info(ext_cap_data, ext_cap_data_len, OP_MODE_NOTIFICATION);
 #endif /* CONFIG_80211AC_VHT */
 #ifdef CONFIG_RTW_WNM
-	rtw_wnm_set_ext_cap_btm(cap_content, 1);
+	rtw_add_ext_cap_info(ext_cap_data, ext_cap_data_len, BSS_TRANSITION);
 #endif
 
 #ifdef CONFIG_RTW_MBO
-	rtw_mbo_set_ext_cap_internw(cap_content, 1);
+	rtw_add_ext_cap_info(ext_cap_data, ext_cap_data_len, INTERWORKING);
 #endif
+
 	/*
 		From 802.11 specification,if a STA does not support any of capabilities defined
 		in the Extended Capabilities element, then the STA is not required to
 		transmit the Extended Capabilities element.
 	*/
-	if (_FALSE == _rtw_memcmp(cap_content, null_content, 8))
-		pframe = rtw_set_ie(out_ie + *pout_len, EID_EXTCapability, 8, cap_content , pout_len);
+	rtw_update_ext_cap_ie(ext_cap_data, *ext_cap_data_len, out_ie, pout_len, _BEACON_IE_OFFSET_);
 }
 #endif
 

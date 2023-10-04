@@ -96,4 +96,6 @@ void halrf_rx_port_ctl_8733b(void *dm_void);
 
 void halrf_rfk_power_save_8733b(void *dm_void, boolean is_power_save);
 
+void halrf_dis_cca_8733b(void *dm_void, boolean is_dis_cca);
+
 #endif /*__HALRF_8733B_H__*/

@@ -1976,7 +1976,7 @@ void phydm_show_cn_hitogram(void *dm_void)
 
 /*@===[Histogram]=============================================================*/
 
-	for (i = 1; i <= dm->num_rf_path; i++) {
+	for (i = 1; i < dm->num_rf_path; i++) {
 		if (dbg_s->p4_cnt[i] == 0)
 			continue;
 

@@ -903,42 +903,6 @@ static void xmit_status_check(PADAPTER p)
 	}
 }
 
-#ifdef CONFIG_USB_HCI
-static void check_rx_count(PADAPTER p)
-{
-	PHAL_DATA_TYPE hal = GET_HAL_DATA(p);
-	struct sreset_priv *psrtpriv = &hal->srestpriv;
-	u16 cur_mac_rxff_ptr;
-
-	/* 0x11c[31:16] is the read pointer address of RXFF0 */
-	cur_mac_rxff_ptr = rtw_read16(p, REG_RXFF_PTR_8733B + 2);
-
-#if 0
-	RTW_INFO("%s,psrtpriv->last_mac_rxff_ptr = %d , cur_mac_rxff_ptr = %d\n", __func__, psrtpriv->last_mac_rxff_ptr, cur_mac_rxff_ptr);
-#endif
-
-	if (psrtpriv->last_mac_rxff_ptr == cur_mac_rxff_ptr) {
-		psrtpriv->rx_cnt++;
-#if 0
-		RTW_INFO("%s,MAC case rx_cnt=%d\n", __func__, psrtpriv->rx_cnt);
-#endif
-		goto exit;
-	}
-
-	psrtpriv->rx_cnt = 0;
-
-exit:
-
-	psrtpriv->last_mac_rxff_ptr = cur_mac_rxff_ptr;
-
-	if (psrtpriv->rx_cnt > 3) {
-		psrtpriv->self_dect_case = 2;
-		psrtpriv->self_dect_rx_cnt++;
-		rtw_hal_sreset_reset(p);
-	}
-}
-#endif/*#ifdef CONFIG_USB_HCI*/
-
 static void linked_status_check(PADAPTER p)
 {
 	PHAL_DATA_TYPE hal = GET_HAL_DATA(p);
@@ -962,10 +926,6 @@ static void linked_status_check(PADAPTER p)
 		rtw_hal_sreset_reset(p);
 #endif /* CONFIG_USB_HCI || CONFIG_PCI_HCI */
 	}
-
-#ifdef CONFIG_USB_HCI
-	check_rx_count(p);
-#endif /* CONFIG_USB_HCI */
 
 	if (psrtpriv->dbg_trigger_point == SRESET_TGP_LINK_STATUS) {
 		psrtpriv->dbg_trigger_point = SRESET_TGP_NULL;
@@ -1714,6 +1674,7 @@ static void hw_var_set_bcn_valid(PADAPTER adapter)
 	rtw_write8(adapter, REG_DWBCN0_CTRL_8733B + 2, val8);
 }
 
+#if 0
 static void hw_var_set_ack_preamble(PADAPTER adapter, u8 bShortPreamble)
 {
 	u8 val8 = 0;
@@ -1729,6 +1690,7 @@ static void hw_var_set_ack_preamble(PADAPTER adapter, u8 bShortPreamble)
 
 	rtw_write8(adapter, REG_WMAC_TRXPTCL_CTL_8733B + 2, val8);
 }
+#endif
 
 void hw_var_set_dl_rsvd_page(PADAPTER adapter, u8 mstatus)
 {
@@ -1961,13 +1923,12 @@ static void hw_port_reconfig(_adapter * if_ap, _adapter *if_port0)
 		rtw_hal_set_hwreg(if_port0, HW_VAR_BSSID, bssid);
 		#ifdef CONFIG_FW_MULTI_PORT_SUPPORT
 		rtw_set_default_port_id(if_port0);
+		#ifdef CONFIG_BT_COEXIST
+		if (GET_HAL_DATA(if_port0)->EEPROMBluetoothCoexist == _TRUE)
+			rtw_hal_set_wifi_btc_port_id_cmd(if_port0);
+		#endif
 		#endif
 	}
-
-#if defined(CONFIG_BT_COEXIST) && defined(CONFIG_FW_MULTI_PORT_SUPPORT)
-	if (GET_HAL_DATA(if_port0)->EEPROMBluetoothCoexist == _TRUE)
-		rtw_hal_set_wifi_btc_port_id_cmd(if_port0);
-#endif
 
 	if_ap->hw_port =HW_PORT0;
 	/* port mac addr switch to adapter mac addr */
@@ -2095,7 +2056,7 @@ u8 rtl8733b_sethwreg(PADAPTER adapter, u8 variable, u8 *val)
 		break;
 
 	case HW_VAR_ACK_PREAMBLE:
-		hw_var_set_ack_preamble(adapter, *val);
+		/* hw_var_set_ack_preamble(adapter, *val); */
 		break;
 
 /*
@@ -2575,6 +2536,259 @@ static void dump_mac_txfifo(void *sel, _adapter *adapter)
 }
 #endif /* CONFIG_PROC_DEBUG */
 
+#ifdef RTW_DETECT_TRX_HANG_JG3
+static void hw_dump_rf_reg(PADAPTER padapter)
+{
+
+}
+
+static void hw_check_bb_state_machine(PADAPTER padapter)
+{
+	u32 bb_st;
+	u8 i;
+
+	bb_st = rtw_read32(padapter, 0x2db4);
+	RTW_INFO("BB state machine : 0x2db4 = 0x%x\n", bb_st);
+}
+
+static void hw_dump_bb_rx_cnt(PADAPTER padapter)
+{
+	u32 bb_cca_cck, bb_cca_ofdm;
+	u32 bb_cck_ok, bb_ofdm_ok, bb_ht_ok, bb_vht_ok;
+	u32 bb_cck_err, bb_ofdm_err, bb_ht_err, bb_vht_err;
+
+	bb_cca_cck = rtw_read16(padapter, 0x2c08);
+	bb_cca_ofdm = rtw_read16(padapter, 0x2c08+2);
+	bb_cck_ok = rtw_read16(padapter, 0x2c04);
+	bb_cck_err = rtw_read16(padapter, 0x2c04+2);
+	bb_ofdm_ok = rtw_read16(padapter, 0x2c14);
+	bb_ofdm_err = rtw_read16(padapter, 0x2c14+2);
+	bb_ht_ok = rtw_read16(padapter, 0x2c10);
+	bb_ht_err = rtw_read16(padapter, 0x2c10+2);
+	bb_vht_ok = rtw_read16(padapter, 0x2c0c);
+	bb_vht_err = rtw_read16(padapter, 0x2c0c+2);
+
+	RTW_INFO("BB CCA counter: cck=%u, ofdm=%u\n", bb_cca_cck, bb_cca_ofdm);
+	RTW_INFO("BB RX OK counter: cck=%u, ofdm=%u, ht=%u, vht=%u\n", bb_cck_ok, bb_ofdm_ok, bb_ht_ok, bb_vht_ok);
+	RTW_INFO("BB RX ERR counter: cck=%u, ofdm=%u, ht=%u, vht=%u\n", bb_cck_err, bb_ofdm_err, bb_ht_err, bb_vht_err);
+}
+
+static void hw_dump_bb_tx_cnt(PADAPTER padapter)
+{
+	/* TX_EN: signal which MAC to BB,  TX_ON: signal which BB to RF, don't know TX success or not */
+	RTW_INFO("BB OFDM TX_EN = %u TX_ON = %u\n", rtw_read16(padapter, 0x2de0), rtw_read16(padapter, 0x2de2));
+	RTW_INFO("BB CCK TX_EN = %u TX_ON = %u\n", rtw_read16(padapter, 0x2de4), rtw_read16(padapter, 0x2de6));
+}
+
+static void hw_dump_mac_cr(PADAPTER padapter)
+{
+	u32 mac_st, mac_st_setting;
+
+	RTW_INFO("MAC TOP : 0x100 = 0x%x\n", rtw_read32(padapter, 0x100));
+
+#if 0
+	rtw_write8(padapter, 0x3a, 0xb9);
+	rtw_write8(padapter, 0xf6, 0x1);
+	RTW_INFO("MAC SCHEDULER_DBG : 0x5f4 = 0x%x\n", rtw_read32(padapter, 0x5f4));
+
+	RTW_INFO("MAC BCNQ_INFO : 0x418 = 0x%x\n", rtw_read32(padapter, 0x418));
+
+	RTW_INFO("MAC Write 0x6b4[28:24] = 0x10001\n");
+	phy_set_mac_reg(padapter, 0x6b4, BIT24 | BIT25 |BIT26 | BIT27 | BIT28, 0x10001);
+	RTW_INFO("MAC STATE_MON : 0x6b4 = 0x%x\n", rtw_read32(padapter, 0x6b4));
+
+	RTW_INFO("MAC Write 0x6b4[28:24] = 0x10000\n");
+	phy_set_mac_reg(padapter, 0x6b4, BIT24 | BIT25 |BIT26 | BIT27 | BIT28, 0x10000);
+	RTW_INFO("MAC STATE_MON : 0x6b4 = 0x%x\n", rtw_read32(padapter, 0x6b4));
+
+	RTW_INFO("MAC LBK_DLY : 0x660 = 0x%x\n", rtw_read32(padapter, 0x660));
+#endif
+
+	RTW_INFO("MAC - TX FIFO HPQ_AVAL_PG = %u\n", rtw_read8(padapter, 0x204));
+	RTW_INFO("MAC - TX FIFO LPQ_AVAL_PG = %u\n", rtw_read8(padapter, 0x205));
+	RTW_INFO("MAC - TX FIFO PUBQ_AVAL_PG = %u\n", rtw_read8(padapter, 0x206));
+	RTW_INFO("MAC - TX FIFO TXPKTNUM = %u\n", rtw_read8(padapter, 0x207));
+	RTW_INFO("MAC - RX FIFO Read/write pointer : 0x11c = 0x%x\n", rtw_read32(padapter, 0x11c));
+}
+
+static void hw_dump_mac_rx_cnt(PADAPTER padapter)
+{
+	u32	mac_cck_ok = 0, mac_ofdm_ok = 0, mac_ht_ok = 0;
+	u32	mac_cck_err = 0, mac_ofdm_err = 0, mac_ht_err = 0;
+	u32	mac_cck_fa = 0, mac_ofdm_fa = 0, mac_ht_fa = 0;
+	u32	DropPacket = 0;
+
+	/* TX OK counter */
+	phy_set_mac_reg(padapter, REG_RXERR_RPT, BIT26, 0x0); /*clear bit-26*/
+
+	phy_set_mac_reg(padapter, REG_RXERR_RPT, BIT28 | BIT29 | BIT30 | BIT31, 0x3);
+	mac_cck_ok = phy_query_mac_reg(padapter, REG_RXERR_RPT, bMaskLWord);/* [15:0] */
+
+	phy_set_mac_reg(padapter, REG_RXERR_RPT, BIT28 | BIT29 | BIT30 | BIT31, 0x0);
+	mac_ofdm_ok = phy_query_mac_reg(padapter, REG_RXERR_RPT, bMaskLWord);/* [15:0] */
+
+	phy_set_mac_reg(padapter, REG_RXERR_RPT, BIT28 | BIT29 | BIT30 | BIT31, 0x6);
+	mac_ht_ok = phy_query_mac_reg(padapter, REG_RXERR_RPT, bMaskLWord);/* [15:0] */
+
+	/* TX Fail counter */
+	phy_set_mac_reg(padapter, REG_RXERR_RPT, BIT26, 0x0); /*clear bit-26*/
+
+	phy_set_mac_reg(padapter, REG_RXERR_RPT, BIT28 | BIT29 | BIT30 | BIT31, 0x4);
+	mac_cck_err = phy_query_mac_reg(padapter, REG_RXERR_RPT, bMaskLWord);/* [15:0] */
+
+	phy_set_mac_reg(padapter, REG_RXERR_RPT, BIT28 | BIT29 | BIT30 | BIT31, 0x1);
+	mac_ofdm_err	= phy_query_mac_reg(padapter, REG_RXERR_RPT, bMaskLWord);/* [15:0] */
+
+	phy_set_mac_reg(padapter, REG_RXERR_RPT, BIT28 | BIT29 | BIT30 | BIT31, 0x7);
+	mac_ht_err = phy_query_mac_reg(padapter, REG_RXERR_RPT, bMaskLWord);/* [15:0] */
+
+	/* TX False alarm counter */
+	phy_set_mac_reg(padapter, REG_RXERR_RPT, BIT26, 0x0);/*clear bit-26*/
+
+	phy_set_mac_reg(padapter, REG_RXERR_RPT, BIT28 | BIT29 | BIT30 | BIT31, 0x5);
+	mac_cck_fa = phy_query_mac_reg(padapter, REG_RXERR_RPT, bMaskLWord);/* [15:0] */
+
+	phy_set_mac_reg(padapter, REG_RXERR_RPT, BIT28 | BIT29 | BIT30 | BIT31, 0x2);
+	mac_ofdm_fa = phy_query_mac_reg(padapter, REG_RXERR_RPT, bMaskLWord);/* [15:0] */
+
+	phy_set_mac_reg(padapter, REG_RXERR_RPT, BIT28 | BIT29 | BIT30 | BIT31, 0x9);
+	mac_ht_fa = phy_query_mac_reg(padapter, REG_RXERR_RPT, bMaskLWord);/* [15:0] */
+
+	/* Mac_DropPacket */
+	rtw_write32(padapter, REG_RXERR_RPT, (rtw_read32(padapter, REG_RXERR_RPT) & 0x0FFFFFFF) | Mac_DropPacket);
+	DropPacket = rtw_read32(padapter, REG_RXERR_RPT) & 0x0000FFFF;
+
+	RTW_INFO("MAC RX OK counter: cck=%u, ofdm=%u, ht=%u\n", mac_cck_ok, mac_ofdm_ok, mac_ht_ok);
+	RTW_INFO("MAC RX ERR counter: cck=%u, ofdm=%u, ht=%u\n", mac_cck_err, mac_ofdm_err, mac_ht_err);
+	RTW_INFO("MAC RX FA counter: cck=%u, ofdm=%u, ht=%u\n", mac_cck_fa, mac_ofdm_fa, mac_ht_fa);
+	RTW_INFO("MAC RX drop counter: %u\n", DropPacket);
+}
+
+static void dump_drv_trx_info(PADAPTER padapter)
+{
+	struct xmit_priv *pxmitpriv = &padapter->xmitpriv;
+	struct recv_priv  *precvpriv = &padapter->recvpriv;
+	struct hw_xmit *phwxmit;
+	struct dvobj_priv *dvobj = padapter->dvobj;
+	struct debug_priv *pdbgpriv = &dvobj->drv_dbg;
+	u8 i;
+
+	RTW_INFO("free_xmitbuf_cnt=%d, free_xmitframe_cnt=%d\n"
+		, pxmitpriv->free_xmitbuf_cnt, pxmitpriv->free_xmitframe_cnt);
+	RTW_INFO("free_xmit_extbuf_cnt=%d, free_xframe_ext_cnt=%d\n"
+		, pxmitpriv->free_xmit_extbuf_cnt, pxmitpriv->free_xframe_ext_cnt);
+	RTW_INFO("free_recvframe_cnt=%d\n", precvpriv->free_recvframe_cnt);
+
+	for (i = 0; i < 4; i++) {
+		phwxmit = pxmitpriv->hwxmits + i;
+		RTW_INFO("%d, hwq.accnt=%d\n", i, phwxmit->accnt);
+	}
+
+#ifdef CONFIG_USB_HCI
+	RTW_INFO("DRV rx_urb_pending_cnt = %d\n", ATOMIC_READ(&(precvpriv->rx_pending_cnt)));
+#endif
+
+	/* Dump FIFO of control information */
+	/* rtw_dump_fifo(RTW_DBGDUMP, padapter, 3, 0x0, 1024); */
+}
+
+static void hw_var_detect_trx_hang_8733b(PADAPTER padapter)
+{
+	RTW_INFO("=========== %s ============\n", __func__);
+	/* Dump RF REG */
+	hw_dump_rf_reg(padapter);
+
+	/* Check BB state machine */
+	hw_check_bb_state_machine(padapter);
+
+	/* Dump BB RX counter */
+	hw_dump_bb_rx_cnt(padapter);
+
+	/* Dump BB TX counter */
+	hw_dump_bb_tx_cnt(padapter);
+
+	/* Dump MAC CR */
+	hw_dump_mac_cr(padapter);
+
+	/* Dump MAC RX counter */
+	hw_dump_mac_rx_cnt(padapter);
+
+	/* Dump driver infomation */
+	dump_drv_trx_info(padapter);
+
+	RTW_INFO("========== %s : Done ==========\n", __func__);
+}
+#endif /* RTW_DETECT_TRX_HANG_JG3 */
+
+#ifdef RTW_DETECT_HANG
+#define MAX_RESET_CNT 4
+#define DETECT_CNT 5
+static void hw_var_detect_rxff_hang(PADAPTER padapter)
+{
+	struct dvobj_priv *dvobj = adapter_to_dvobj(padapter);
+	struct hang_info *phang_info = &(dvobj->drv_dbg.dbg_hang_info);
+	struct bb_hang_info *pbb_hang_info = &phang_info->dbg_bb_hang_info;
+	u32 rxff_cnt_orig_r = 0, rxff_cnt_orig_w = 0, rxff_cnt_r = 0, rxff_cnt_w = 0;
+	u8 i = 0;
+	u8 check_rxff_hang = _FALSE;
+	PHAL_DATA_TYPE hal = GET_HAL_DATA(padapter);
+	struct sreset_priv *psrtpriv = &hal->srestpriv;
+
+	rxff_cnt_orig_r = rtw_read16(padapter, 0x11C + 2);
+	rxff_cnt_orig_w = rtw_read16(padapter, 0x11C);
+	rtw_msleep_os(10);
+
+	for (i = 0; i < DETECT_CNT; i++) {
+		rxff_cnt_r = rtw_read16(padapter, 0x11C + 2);
+		rxff_cnt_w = rtw_read16(padapter, 0x11C);
+		rtw_msleep_os(10);
+
+		if (rxff_cnt_orig_r != rxff_cnt_r || rxff_cnt_orig_w != rxff_cnt_w) {
+			check_rxff_hang = _FALSE;
+		} else {
+			if (rxff_cnt_r != rxff_cnt_w) /* read pointer can't move, means hang */
+				check_rxff_hang = _TRUE;
+			else
+				check_rxff_hang = _FALSE;
+		}
+
+		if (check_rxff_hang == _FALSE)
+			break;
+	}
+
+	if (check_rxff_hang) {
+		if (rxff_cnt_orig_r == pbb_hang_info->last_rxff_cnt_r &&
+		    rxff_cnt_orig_w == pbb_hang_info->last_rxff_cnt_w)
+			pbb_hang_info->rxff_hang_cnt++;
+	} else {
+		pbb_hang_info->rxff_hang_cnt = 0;
+	}
+
+	pbb_hang_info->last_rxff_cnt_r = rxff_cnt_orig_r;
+	pbb_hang_info->last_rxff_cnt_w = rxff_cnt_orig_w;
+
+	/* 
+	 * Trigger silent reset if RX_FIFO hangs 2 times continuously.
+	 * Don't trigger sreset anymore if it triggers 3 times continuously.
+	 */
+	if (pbb_hang_info->rxff_hang_cnt > 1 &&
+	    pbb_hang_info->rxff_hang_cnt < MAX_RESET_CNT)
+		pbb_hang_info->is_rxff_hang = _TRUE;
+	else
+		pbb_hang_info->is_rxff_hang = _FALSE;
+
+	if (pbb_hang_info->is_rxff_hang) {
+		psrtpriv->self_dect_case = 2;
+		psrtpriv->self_dect_rx_cnt++;
+		RTW_ERR("RXFF maybe hang, trigger silent reset to recover\n");
+		mac_reg_dump(RTW_DBGDUMP, padapter);
+		bb_reg_dump(RTW_DBGDUMP, padapter);
+		rf_reg_dump(RTW_DBGDUMP, padapter);
+		rtw_hal_sreset_reset(padapter);
+	}
+}
+#endif /* RTW_DETECT_HANG */
+
 static u8 hw_var_get_bcn_valid(PADAPTER adapter)
 {
 	u8 val8 = 0;
@@ -2843,6 +3057,18 @@ void rtl8733b_gethwreg(PADAPTER adapter, u8 variable, u8 *val)
 	case HW_VAR_BCN_CTRL_ADDR:
 		*((u32 *)val) = hw_bcn_ctrl_addr(adapter, adapter->hw_port);
 		break;
+
+#ifdef RTW_DETECT_TRX_HANG_JG3
+	case HW_VAR_DETECT_TRX_HANG_JG3:
+		hw_var_detect_trx_hang_8733b(adapter);
+		break;
+#endif
+
+#ifdef RTW_DETECT_HANG
+	case HW_VAR_DETECT_RXFF_HANG:
+		hw_var_detect_rxff_hang(adapter);
+		break;
+#endif
 
 	default:
 		GetHwReg(adapter, variable, val);

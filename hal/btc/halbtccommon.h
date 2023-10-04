@@ -32,6 +32,7 @@ void rtw_btc_ex_connect_notify(struct btc_coexist *btc, u8 type);
 void rtw_btc_ex_media_status_notify(struct btc_coexist *btc, u8 type);
 void rtw_btc_ex_specific_packet_notify(struct btc_coexist *btc, u8 type);
 void rtw_btc_ex_bt_info_notify(struct btc_coexist *btc, u8 *tmp_buf, u8 length);
+void rtw_btc_ex_bt_le_audio_info_notify(struct btc_coexist *btc, u8 *tmp_buf, u8 length);
 void rtw_btc_ex_wl_fwdbginfo_notify(struct btc_coexist *btc, u8 *tmp_buf,
 				    u8 length);
 void rtw_btc_ex_rx_rate_change_notify(struct btc_coexist *btc,
@@ -68,6 +69,7 @@ void rtw_btc_ex_wl_rfk_notify(struct btc_coexist *btc, u8 path,
 #define rtw_btc_ex_media_status_notify(btc, type)
 #define rtw_btc_ex_specific_packet_notify(btc, type)
 #define rtw_btc_ex_bt_info_notify(btc, tmp_buf, length)
+#define rtw_btc_ex_bt_le_audio_info_notify(btc, tmp_buf, length)
 #define rtw_btc_ex_wl_fwdbginfo_notify(btc, tmp_buf, length)
 #define rtw_btc_ex_rx_rate_change_notify(btc, is_data_frame, btc_rate_id)
 #define rtw_btc_ex_tx_rate_change_notify(btcoexist, tx_rate, tx_retry_ratio, \

@@ -439,13 +439,13 @@ void halrf_spur_compensation_8733b(void *dm_void)
 	reg_rf5 = odm_get_rf_reg(dm, path, RF_0x5, 0xfffff);
 	//0x818[11]=0x1940[31]=0x1CE8[28]=0xDB4[0]=0,Turn off NBI/CSI
 	RF_DBG(dm, DBG_RF_LCK, "[RF][spur]Turn off NBI/CSI!!!!!!!\n");
-	odm_set_bb_reg(dm, R_0x818, BIT(11), 0);
-	odm_set_bb_reg(dm, R_0x1940, BIT(31), 0);
-	odm_set_bb_reg(dm, R_0x1ce8, BIT(28), 0);
-	odm_set_bb_reg(dm, R_0xdb4, BIT(0), 0);
 	backup_bb_register_8733b(dm, bb_backup, backup_bb_reg, 10);
 	switch (band) {
 	case 0:  //2G
+		odm_set_bb_reg(dm, R_0x818, BIT(11), 0);
+		odm_set_bb_reg(dm, R_0x1940, BIT(31), 0);
+		odm_set_bb_reg(dm, R_0x1ce8, BIT(28), 0);
+		odm_set_bb_reg(dm, R_0xdb4, BIT(0), 0);
 		if (dm->rfe_type <= 2 || dm->rfe_type == 4 || dm->rfe_type == 9) {//only pathA or pathB
 			odm_set_bb_reg(dm, 0x1884, BIT(20), path);
 			odm_set_rf_reg(dm, RF_PATH_A, RF_0x5, BIT(0), 0x0);
@@ -461,9 +461,9 @@ void halrf_spur_compensation_8733b(void *dm_void)
 			halrf_spur_compensation_2G_8733b(dm, RF_PATH_B);
 		}
 		break;
-	case 1:  //5G
-		halrf_spur_compensation_5G_8733b(dm);
-		break;
+//	case 1:  //5G
+//		halrf_spur_compensation_5G_8733b(dm);
+//		break;
 	default:
 		RF_DBG(dm, DBG_RF_LCK, "[RF]invalid band!!!!!!!\n");
 		break;
@@ -593,13 +593,11 @@ void phy_set_rf_path_switch_8733b(void *adapter, boolean is_main)
 #endif
 #endif
 	if (is_main) {
-		/*RF S0*/
-		odm_set_bb_reg(dm, R_0x1884, BIT(21), 0x0);
-		odm_set_bb_reg(dm, R_0x1884, BIT(20), 0x0);
+		/*SW ctrl GNT_BT=0, SW ctrl GNT_WL=1*/
+		odm_set_bb_reg(dm, 0x73, 0xF0, 0x9);
 	} else {
-		/*RF S1*/
-		odm_set_bb_reg(dm, R_0x1884, BIT(21), 0x0);
-		odm_set_bb_reg(dm, R_0x1884, BIT(20), 0x1);
+		/*SW ctrl GNT_BT=1, SW ctrl GNT_WL=0*/
+		odm_set_bb_reg(dm, 0x73, 0xF0, 0x7);
 	}
 }
 
@@ -737,6 +735,24 @@ void halrf_rfk_power_save_8733b(void *dm_void, boolean is_power_save)
 		odm_set_bb_reg(dm, 0x1c64, BIT(30), 0x1);
 	else /*RFK disable pwrsave*/
 		odm_set_bb_reg(dm, 0x1c64, BIT(30), 0x0);
+}
+
+void halrf_dis_cca_8733b(void *dm_void, boolean is_dis_cca)
+{
+	struct dm_struct *dm = (struct dm_struct *)dm_void;
+	struct _hal_rf_ *rf = &(dm->rf_table);
+	if (is_dis_cca) {
+		/*disable OFDM pd_flag*/
+		odm_set_bb_reg(dm, 0x1c68, 0x03000000, 0x3);
+		/*r_11b_disable_rx_cca*/
+		odm_set_bb_reg(dm, 0x2a24, BIT(13), 0x1);
+		odm_set_mac_reg(dm, 0x100, BIT(24), 0x1);
+	} else {
+		odm_set_bb_reg(dm, 0x1c68, MASKDWORD, rf->reg1c68);
+		odm_set_bb_reg(dm, 0x2a24, MASKDWORD, rf->reg2a24);
+		odm_set_mac_reg(dm, 0x100, BIT(24), 0x0);
+
+	}
 }
 
 #endif /*(RTL8733B_SUPPORT == 0)*/

@@ -2870,3 +2870,66 @@ BIP_exit:
 
 #endif /* CONFIG_IEEE80211W */
 
+/* IV is encryption header index of packet,
+ * PN is sequence number after correct mapping.
+ */
+u8 rtw_iv_to_pn(u8 *iv, u8 *pn, u8 *key_id, u32 enc_algo)
+{
+	/* iv and pn must be Little Endian format */
+	switch (enc_algo) {
+	case _TKIP_:
+		*(pn)     = *(iv + 2);
+		*(pn + 1) = *(iv);
+		break;
+	case _AES_:
+	case _GCMP_:
+	case _CCMP_256_:
+	case _GCMP_256_:
+		*(pn)     = *(iv);
+		*(pn + 1) = *(iv + 1);
+		break;
+	default:
+		return _FAIL;
+	}
+
+	*(pn + 2) = *(iv + 4);
+	*(pn + 3) = *(iv + 5);
+	*(pn + 4) = *(iv + 6);
+	*(pn + 5) = *(iv + 7);
+
+	if (key_id)
+		*key_id = *(iv + 3) >> 6;
+
+	return _SUCCESS;
+}
+
+u8 rtw_pn_to_iv(u8 *pn, u8 *iv, u8 key_id, u32 enc_algo)
+{
+	/* iv and pn must be Little Endian format */
+	switch (enc_algo) {
+	case _TKIP_:
+		*(iv)     = *(pn + 1);
+		*(iv + 1) = (*(pn + 1) | 0x20) & 0x7F;
+		*(iv + 2) = *(pn);
+		break;
+	case _AES_:
+	case _GCMP_:
+	case _CCMP_256_:
+	case _GCMP_256_:
+		*(iv)     = *(pn);
+		*(iv + 1) = *(pn + 1);
+		*(iv + 2) = 0;
+		break;
+	default:
+		return _FAIL;
+	}
+
+	*(iv + 3) = BIT(5) | ((key_id & 0x3) << 6);
+	*(iv + 4) = *(pn + 2);
+	*(iv + 5) = *(pn + 3);
+	*(iv + 6) = *(pn + 4);
+	*(iv + 7) = *(pn + 5);
+
+	return _SUCCESS;
+}
+

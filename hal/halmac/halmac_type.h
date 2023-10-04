@@ -980,9 +980,9 @@ enum halmac_pri_ch_idx {
 	HALMAC_CH_IDX_UNDEFINE = 0,
 	HALMAC_CH_IDX_1 = 1,
 	HALMAC_CH_IDX_2 = 2,
-	HALMAC_CH_IDX_3 = 3,
-	HALMAC_CH_IDX_4 = 4,
-	HALMAC_CH_IDX_MAX = 5,
+	//HALMAC_CH_IDX_3 = 3,
+	//HALMAC_CH_IDX_4 = 4,
+	//HALMAC_CH_IDX_MAX = 5,
 };
 
 struct halmac_ch_info {
@@ -1497,6 +1497,7 @@ struct halmac_ver {
 	u8 major_ver;
 	u8 prototype_ver;
 	u8 minor_ver;
+	u8 patch_ver;
 };
 
 enum halmac_api_id {

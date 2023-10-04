@@ -540,6 +540,10 @@ struct _halrf_tssi_data {
 	u8 tssi_finish_bit[PHYDM_MAX_RF_PATH];
 	u8 thermal_trigger;
 	s8 tssi_de;
+#if (RTL8733B_SUPPORT == 1)
+	s8 txagc_offset_thermaltrack[MAX_PATH_NUM_8733B];
+	u8 thermal_cal;
+#endif
 };
 
 struct _halrf_txgapk_info {
@@ -601,6 +605,8 @@ struct _hal_rf_ {
 	u8 power_track_type;
 	u8 mp_pwt_type;
 	u8 pre_band_type;
+	u32 reg1c68;
+	u32 reg2a24;
 };
 
 /*@============================================================*/
@@ -811,7 +817,11 @@ void halrf_dump_rfk_reg(void *dm_void, char input[][16], u32 *_used,
 
 void halrf_xtal_thermal_track(void *dm_void);
 
+void halrf_powertracking_thermal(void *dm_void);
+
 u32 halrf_tssi_turn_target_power(void *dm_void, s16 power_offset, u8 path);
+
+void halrf_tssi_set_power_offset(void *dm_void, s16 power_offset, u8 path);
 
 void halrf_rfk_power_save(void *dm_void, boolean is_power_save);
 
