@@ -679,6 +679,10 @@ module_param(rtw_dfs_region_domain, uint, 0644);
 MODULE_PARM_DESC(rtw_dfs_region_domain, "0:UNKNOWN, 1:FCC, 2:MKK, 3:ETSI");
 #endif
 
+uint rtw_amsdu_mode = RTW_AMSDU_MODE_NON_SPP;
+module_param(rtw_amsdu_mode, uint, 0644);
+MODULE_PARM_DESC(rtw_amsdu_mode, "0:non-spp, 1:spp, 2:all drop");
+
 uint rtw_amplifier_type_2g = CONFIG_RTW_AMPLIFIER_TYPE_2G;
 module_param(rtw_amplifier_type_2g, uint, 0644);
 MODULE_PARM_DESC(rtw_amplifier_type_2g, "BIT3:2G ext-PA, BIT4:2G ext-LNA");
@@ -1428,6 +1432,8 @@ uint loadparam(_adapter *padapter)
 #ifdef CONFIG_DFS_MASTER
 	registry_par->dfs_region_domain = (u8)rtw_dfs_region_domain;
 #endif
+
+	registry_par->amsdu_mode = (u8)rtw_amsdu_mode;
 
 #ifdef CONFIG_MCC_MODE
 	registry_par->en_mcc = (u8)rtw_en_mcc;

@@ -1286,6 +1286,9 @@ static s32 update_attrib_sec_info(_adapter *padapter, struct pkt_attrib *pattrib
 		pattrib->bswenc = _FALSE;
 #endif
 
+	if ((pattrib->encrypt) && (eapol_type == EAPOL_4_4))
+		pattrib->bswenc = _TRUE;
+
 exit:
 
 	return res;
@@ -2587,6 +2590,7 @@ u32 rtw_calculate_wlan_pkt_size_by_attribue(struct pkt_attrib *pattrib)
 s32 check_amsdu(struct xmit_frame *pxmitframe)
 {
 	struct pkt_attrib *pattrib;
+	struct sta_info *psta = NULL;
 	s32 ret = _TRUE;
 
 	if (!pxmitframe)
@@ -2594,6 +2598,11 @@ s32 check_amsdu(struct xmit_frame *pxmitframe)
 
 	pattrib = &pxmitframe->attrib;
 
+	psta = rtw_get_stainfo(&pxmitframe->padapter->stapriv, &pattrib->ra[0]);
+	if (psta) {
+		if (psta->flags & WLAN_STA_AMSDU_DISABLE)
+			ret =_FALSE;
+	}
 	if (IS_MCAST(pattrib->ra))
 		ret = _FALSE;
 

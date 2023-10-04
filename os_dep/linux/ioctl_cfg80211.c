@@ -3000,8 +3000,8 @@ static int rtw_cfg80211_set_probe_req_wpsp2pie(_adapter *padapter, char *buf, in
 			_rtw_memcpy(pmlmepriv->p2p_probe_req_ie, p2p_ie, p2p_ielen);
 			pmlmepriv->p2p_probe_req_ie_len = p2p_ielen;
 
-			if (rtw_get_p2p_attr_content(p2p_ie, p2p_ielen, P2P_ATTR_LISTEN_CH, (u8 *)listen_ch_attr, (uint *) &attr_contentlen)
-				&& attr_contentlen == 5) {
+			attr_contentlen = sizeof(listen_ch_attr);
+			if (rtw_get_p2p_attr_content(p2p_ie, p2p_ielen, P2P_ATTR_LISTEN_CH, (u8 *)listen_ch_attr, (uint *) &attr_contentlen)) {
 				if (wdinfo->listen_channel !=  listen_ch_attr[4]) {
 					RTW_INFO(FUNC_ADPT_FMT" listen channel - country:%c%c%c, class:%u, ch:%u\n",
 						FUNC_ADPT_ARG(padapter), listen_ch_attr[0], listen_ch_attr[1], listen_ch_attr[2],
@@ -3800,7 +3800,7 @@ static int rtw_cfg80211_set_wpa_ie(_adapter *padapter, u8 *pie, size_t ielen)
 
 	pwpa2 = rtw_get_wpa2_ie(buf, &wpa2_ielen, ielen);
 	if (pwpa2 && wpa2_ielen > 0) {
-		if (rtw_parse_wpa2_ie(pwpa2, wpa2_ielen + 2, &group_cipher, &pairwise_cipher, NULL, NULL, &mfp_opt) == _SUCCESS) {
+		if (rtw_parse_wpa2_ie(pwpa2, wpa2_ielen + 2, &group_cipher, &pairwise_cipher, NULL, NULL, &mfp_opt, NULL) == _SUCCESS) {
 			padapter->securitypriv.dot11AuthAlgrthm = dot11AuthAlgrthm_8021X;
 			padapter->securitypriv.ndisauthtype = Ndis802_11AuthModeWPA2PSK;
 			_rtw_memcpy(padapter->securitypriv.supplicant_ie, &pwpa2[0], wpa2_ielen + 2);
@@ -6381,6 +6381,7 @@ static int rtw_cfg80211_set_probe_resp_wpsp2pie(struct net_device *net, char *bu
 			#endif
 
 			/* Check P2P Capability ATTR */
+			attr_contentlen = sizeof(cap_attr);
 			if (rtw_get_p2p_attr_content(p2p_ie, p2p_ielen, P2P_ATTR_CAPABILITY, (u8 *)&cap_attr, (uint *) &attr_contentlen)) {
 				u8 grp_cap = 0;
 				/* RTW_INFO( "[%s] Got P2P Capability Attr!!\n", __FUNCTION__ ); */
@@ -7160,6 +7161,7 @@ void rtw_cfg80211_issue_p2p_provision_request(_adapter *padapter, const u8 *buf,
 	pwdinfo->tx_prov_disc_info.wps_config_method_request = WPS_CM_PUSH_BUTTON;
 
 	rtw_get_wps_ie(frame_body + _PUBLIC_ACTION_IE_OFFSET_, frame_body_len - _PUBLIC_ACTION_IE_OFFSET_, wpsie, &wpsielen);
+	wps_devicepassword_id_len = sizeof(wps_devicepassword_id);
 	rtw_get_wps_attr_content(wpsie, wpsielen, WPS_ATTR_DEVICE_PWID, (u8 *) &wps_devicepassword_id, &wps_devicepassword_id_len);
 	wps_devicepassword_id = be16_to_cpu(wps_devicepassword_id);
 
@@ -7187,7 +7189,9 @@ void rtw_cfg80211_issue_p2p_provision_request(_adapter *padapter, const u8 *buf,
 
 	if (rtw_get_p2p_ie(frame_body + _PUBLIC_ACTION_IE_OFFSET_, frame_body_len - _PUBLIC_ACTION_IE_OFFSET_, p2p_ie, &p2p_ielen)) {
 
+		devinfo_contentlen = sizeof(devinfo_content);
 		rtw_get_p2p_attr_content(p2p_ie, p2p_ielen, P2P_ATTR_DEVICE_INFO, devinfo_content, &devinfo_contentlen);
+		capability_len = sizeof(capability);
 		rtw_get_p2p_attr_content(p2p_ie, p2p_ielen, P2P_ATTR_CAPABILITY, (u8 *)&capability, &capability_len);
 
 	}
@@ -8252,6 +8256,7 @@ exit:
 	return ret;
 }
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 8, 0))
 static void cfg80211_rtw_mgmt_frame_register(struct wiphy *wiphy,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 6, 0))
 	struct wireless_dev *wdev,
@@ -8264,7 +8269,6 @@ static void cfg80211_rtw_mgmt_frame_register(struct wiphy *wiphy,
 	struct net_device *ndev = wdev_to_ndev(wdev);
 #endif
 	_adapter *adapter;
-
 	struct rtw_wdev_priv *pwdev_priv;
 
 	if (ndev == NULL)
@@ -8281,22 +8285,22 @@ static void cfg80211_rtw_mgmt_frame_register(struct wiphy *wiphy,
 	switch (frame_type) {
 	case IEEE80211_STYPE_AUTH: /* 0x00B0 */
 		if (reg > 0)
-			SET_CFG80211_REPORT_MGMT(pwdev_priv, IEEE80211_STYPE_AUTH, reg);
+			SET_CFG80211_REPORT_MGMT(pwdev_priv, IEEE80211_STYPE_AUTH);
 		else
-			CLR_CFG80211_REPORT_MGMT(pwdev_priv, IEEE80211_STYPE_AUTH, reg);
+			CLR_CFG80211_REPORT_MGMT(pwdev_priv, IEEE80211_STYPE_AUTH);
 		break;
 #ifdef not_yet
 	case IEEE80211_STYPE_PROBE_REQ: /* 0x0040 */
 		if (reg > 0)
-			SET_CFG80211_REPORT_MGMT(pwdev_priv, IEEE80211_STYPE_PROBE_REQ, reg);
+			SET_CFG80211_REPORT_MGMT(pwdev_priv, IEEE80211_STYPE_PROBE_REQ);
 		else
-			CLR_CFG80211_REPORT_MGMT(pwdev_priv, IEEE80211_STYPE_PROBE_REQ, reg);
+			CLR_CFG80211_REPORT_MGMT(pwdev_priv, IEEE80211_STYPE_PROBE_REQ);
 		break;
 	case IEEE80211_STYPE_ACTION: /* 0x00D0 */
 		if (reg > 0)
-			SET_CFG80211_REPORT_MGMT(pwdev_priv, IEEE80211_STYPE_ACTION, reg);
+			SET_CFG80211_REPORT_MGMT(pwdev_priv, IEEE80211_STYPE_ACTION);
 		else
-			CLR_CFG80211_REPORT_MGMT(pwdev_priv, IEEE80211_STYPE_ACTION, reg);
+			CLR_CFG80211_REPORT_MGMT(pwdev_priv, IEEE80211_STYPE_ACTION);
 		break;
 #endif
 	default:
@@ -8306,6 +8310,46 @@ static void cfg80211_rtw_mgmt_frame_register(struct wiphy *wiphy,
 exit:
 	return;
 }
+#else
+static void cfg80211_rtw_update_mgmt_frame_register(
+	struct wiphy *wiphy,
+	struct wireless_dev *wdev,
+	struct mgmt_frame_regs *upd)
+{
+	struct net_device *ndev;
+	_adapter *padapter;
+	struct rtw_wdev_priv *pwdev_priv;
+	u32 rtw_stypes_mask = 0;
+	u32 rtw_mstypes_mask = 0;
+
+	ndev = wdev_to_ndev(wdev);
+
+	if (ndev == NULL)
+		goto exit;
+
+	padapter = (_adapter *)rtw_netdev_priv(ndev);
+	pwdev_priv = adapter_wdev_data(padapter);
+
+	rtw_stypes_mask = BIT(IEEE80211_STYPE_AUTH >> 4);
+
+#ifdef CONFIG_DEBUG_CFG80211
+	RTW_INFO(FUNC_ADPT_FMT " global_stypes:0x%08x interface_stypes:0x%08x\n",
+		FUNC_ADPT_ARG(padapter), upd->global_stypes, upd->interface_stypes);
+	RTW_INFO(FUNC_ADPT_FMT " global_mcast_stypes:0x%08x interface_mcast_stypes:0x%08x\n",
+		FUNC_ADPT_ARG(padapter), upd->global_mcast_stypes, upd->interface_mcast_stypes);
+	RTW_INFO(FUNC_ADPT_FMT " old_regs:0x%08x new_regs:0x%08x\n",
+		FUNC_ADPT_ARG(padapter), pwdev_priv->mgmt_regs,
+		(upd->interface_stypes & rtw_stypes_mask));
+#endif
+	if (pwdev_priv->mgmt_regs !=
+			(upd->interface_stypes & rtw_stypes_mask)) {
+		pwdev_priv->mgmt_regs = (upd->interface_stypes & rtw_stypes_mask);
+	}
+
+exit:
+	return;
+}
+#endif
 
 #if defined(CONFIG_TDLS) && (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 2, 0))
 static int cfg80211_rtw_tdls_mgmt(struct wiphy *wiphy,
@@ -10339,7 +10383,11 @@ static struct cfg80211_ops rtw_cfg80211_ops = {
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 37)) || defined(COMPAT_KERNEL_RELEASE)
 	.mgmt_tx = cfg80211_rtw_mgmt_tx,
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 8, 0))
 	.mgmt_frame_register = cfg80211_rtw_mgmt_frame_register,
+#else
+	.update_mgmt_frame_registrations = cfg80211_rtw_update_mgmt_frame_register,
+#endif
 #elif (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 34) && LINUX_VERSION_CODE <= KERNEL_VERSION(2, 6, 35))
 	.action = cfg80211_rtw_mgmt_tx,
 #endif

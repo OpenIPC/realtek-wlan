@@ -109,7 +109,7 @@
 /* #define CONFIG_ANTENNA_DIVERSITY	 */
 /* #define SUPPORT_HW_RFOFF_DETECTED */
 
-#define CONFIG_RTW_LED
+//#define CONFIG_RTW_LED
 #ifdef CONFIG_RTW_LED
 	#define CONFIG_RTW_SW_LED
 	#ifdef CONFIG_RTW_SW_LED

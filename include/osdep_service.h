@@ -153,6 +153,7 @@ typedef enum mstat_status {
 	MSTAT_FREE
 } MSTAT_STATUS;
 
+#define DBG_MEM_ALLOC
 #ifdef DBG_MEM_ALLOC
 void rtw_mstat_update(const enum mstat_f flags, const MSTAT_STATUS status, u32 sz);
 void rtw_mstat_dump(void *sel);
