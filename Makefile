@@ -8,6 +8,8 @@ EXTRA_CFLAGS += -Os
 #EXTRA_CFLAGS += -Wshadow -Wpointer-arith -Wcast-qual -Wstrict-prototypes -Wmissing-prototypes
 
 EXTRA_CFLAGS += -Wno-unused-variable
+EXTRA_CFLAGS += -Wno-address
+EXTRA_CFLAGS += -Wno-address-of-packed-member
 #EXTRA_CFLAGS += -Wno-unused-value
 #EXTRA_CFLAGS += -Wno-unused-label
 #EXTRA_CFLAGS += -Wno-unused-parameter
