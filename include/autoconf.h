@@ -109,7 +109,7 @@
 /* #define CONFIG_ANTENNA_DIVERSITY	 */
 /* #define SUPPORT_HW_RFOFF_DETECTED */
 
-//#define CONFIG_RTW_LED
+#define CONFIG_RTW_LED
 #ifdef CONFIG_RTW_LED
 	#define CONFIG_RTW_SW_LED
 	#ifdef CONFIG_RTW_SW_LED
@@ -127,6 +127,8 @@
 #define DISABLE_BB_RF	0
 
 #define RTW_NOTCH_FILTER 0 /* 0:Disable, 1:Enable, */
+
+#define CONFIG_RX_PACKET_APPEND_FCS
 
 /*
  * Interface Related Configure

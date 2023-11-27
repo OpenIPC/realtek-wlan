@@ -8599,6 +8599,7 @@ void issue_asocrsp(_adapter *padapter, unsigned short status, struct sta_info *p
 	struct mlme_ext_info	*pmlmeinfo = &(pmlmeext->mlmext_info);
 	WLAN_BSSID_EX *pnetwork = &(pmlmeinfo->network);
 	u8 *ie = pnetwork->IEs;
+	struct security_priv *psecuritypriv = &(padapter->securitypriv);
 #ifdef CONFIG_P2P
 	struct wifidirect_info	*pwdinfo = &(padapter->wdinfo);
 #ifdef CONFIG_WFD
@@ -8777,6 +8778,14 @@ void issue_asocrsp(_adapter *padapter, unsigned short status, struct sta_info *p
 
 		pframe += pmlmepriv->wps_assoc_resp_ie_len;
 		pattrib->pktlen += pmlmepriv->wps_assoc_resp_ie_len;
+	}
+
+
+	if ((psecuritypriv->auth_type == MLME_AUTHTYPE_SAE) &&
+		pmlmepriv->assoc_rsp && pmlmepriv->assoc_rsp_len > 0) {
+		_rtw_memcpy(pframe, pmlmepriv->assoc_rsp, pmlmepriv->assoc_rsp_len);
+		pframe += pmlmepriv->assoc_rsp_len;
+		pattrib->pktlen += pmlmepriv->assoc_rsp_len;
 	}
 
 #ifdef CONFIG_P2P
@@ -9106,6 +9115,10 @@ void _issue_assocreq(_adapter *padapter, u8 is_reassoc)
 				/* tmp: update rsn's spp related opt. */
 				/*rtw_set_spp_amsdu_mode(padapter->registrypriv.amsdu_mode, pframe - (pIE->Length + 2), pIE->Length +2);*/
 			}
+			break;
+			case WLAN_EID_RSNX:
+				pframe = rtw_set_ie(pframe, WLAN_EID_RSNX, pIE->Length,
+					pIE->data, &(pattrib->pktlen));
 			break;
 #ifdef CONFIG_80211N_HT
 		case EID_HTCapability:

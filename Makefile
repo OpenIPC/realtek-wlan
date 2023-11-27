@@ -54,7 +54,7 @@ CONFIG_GSPI_HCI = n
 ########################## Features ###########################
 CONFIG_AP_MODE = y
 CONFIG_P2P = y
-CONFIG_MP_INCLUDED = n
+CONFIG_MP_INCLUDED = y
 CONFIG_POWER_SAVING = y
 CONFIG_IPS_MODE = default
 CONFIG_LPS_MODE = default
@@ -92,7 +92,7 @@ CONFIG_IP_R_MONITOR = n #arp VOQ and high rate
 CONFIG_RTW_UP_MAPPING_RULE = tos
 CONFIG_RTW_MBO = n
 ########################## Android ###########################
-# CONFIG_RTW_ANDROID - 0: no Android, 4/5/6/7/8/9/10 : Android version
+# CONFIG_RTW_ANDROID - 0: no Android, 4/5/6/7/8/9/10/11 : Android version
 CONFIG_RTW_ANDROID = 0
 
 ifeq ($(shell test $(CONFIG_RTW_ANDROID) -gt 0; echo $$?), 0)
@@ -1696,20 +1696,20 @@ MODULE_NAME := wlan
 endif
 
 ifeq ($(CONFIG_PLATFORM_ARM_RK3188), y)
-EXTRA_CFLAGS += -DCONFIG_LITTLE_ENDIAN -DCONFIG_PLATFORM_ROCKCHIPS #-DCONFIG_MINIMAL_MEMORY_USAGE
+EXTRA_CFLAGS += -DCONFIG_LITTLE_ENDIAN -DCONFIG_PLATFORM_ANDROID -DCONFIG_PLATFORM_ROCKCHIPS
 # default setting for Android 4.1, 4.2, 4.3, 4.4
 EXTRA_CFLAGS += -DCONFIG_IOCTL_CFG80211 -DRTW_USE_CFG80211_STA_EVENT
 EXTRA_CFLAGS += -DCONFIG_CONCURRENT_MODE
 # default setting for Power control
-# EXTRA_CFLAGS += -DRTW_ENABLE_WIFI_CONTROL_FUNC
+#EXTRA_CFLAGS += -DRTW_ENABLE_WIFI_CONTROL_FUNC
 ifeq ($(CONFIG_SDIO_HCI), y)
 EXTRA_CFLAGS += -DRTW_SUPPORT_PLATFORM_SHUTDOWN
 endif
 # default setting for Special function
 ARCH := arm
-#CROSS_COMPILE := /home/android_sdk/Rockchip/Rk3188/prebuilts/gcc/linux-x86/arm/arm-eabi-4.6/bin/arm-eabi-
-#KSRC := /home/android_sdk/Rockchip/Rk3188/kernel
-MODULE_NAME := 8188fu
+CROSS_COMPILE := /home/android_sdk/Rockchip/Rk3188/prebuilts/gcc/linux-x86/arm/arm-eabi-4.6/bin/arm-eabi-
+KSRC := /home/android_sdk/Rockchip/Rk3188/kernel
+MODULE_NAME := RTL8189FU
 endif
 
 ifeq ($(CONFIG_PLATFORM_ARM_RK3066), y)
@@ -2320,6 +2320,8 @@ endif
 
 ifneq ($(KERNELRELEASE),)
 
+export CONFIG_RTL8188FU = m
+
 ########### this part for *.mk ############################
 include $(src)/hal/phydm/phydm.mk
 
@@ -2425,7 +2427,6 @@ $(MODULE_NAME)-$(CONFIG_MP_INCLUDED)+= core/rtw_bt_mp.o
 endif
 
 obj-$(CONFIG_RTL8188FU) := $(MODULE_NAME).o
-obj-m := $(MODULE_NAME).o
 
 else
 

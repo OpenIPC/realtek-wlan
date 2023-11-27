@@ -205,6 +205,8 @@ static struct ieee80211_channel rtw_5ghz_a_channels[MAX_CHANNEL_NUM_5G] = {
 	CHAN5G(165, 0),	CHAN5G(169, 0),	CHAN5G(173, 0),	CHAN5G(177, 0),
 };
 
+static int rtw_cfg80211_set_assocresp_ies(struct net_device *net, const u8 *buf, int len);
+
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0))
 static u8 rtw_chbw_to_cfg80211_chan_def(struct wiphy *wiphy, struct cfg80211_chan_def *chdef, u8 ch, u8 bw, u8 offset, u8 ht)
 {
@@ -454,7 +456,20 @@ u8 rtw_cfg80211_ch_switch_notify(_adapter *adapter, u8 ch, u8 bw, u8 offset,
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 19, 0))
 	if (started) {
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0))
+
+		/* --- cfg80211_ch_switch_started_notfiy() ---
+		 *  A new parameter, bool quiet, is added from Linux kernel v5.11,
+		 *  to see if block-tx was requested by the AP. since currently,
+		 *  the API is used for station before connected in rtw_chk_start_clnt_join()
+		 *  the quiet is set to false here first. May need to refine it if
+		 *  called by others with block-tx.
+		 */
+
+		cfg80211_ch_switch_started_notify(adapter->pnetdev, &chdef, 0, false);
+#else
 		cfg80211_ch_switch_started_notify(adapter->pnetdev, &chdef, 0);
+#endif
 		goto exit;
 	}
 #endif
@@ -3516,6 +3531,22 @@ exit:
 	return ret;
 }
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)) && \
+    defined(CONFIG_RTW_ABORT_SCAN)
+static void cfg80211_rtw_abort_scan(struct wiphy *wiphy,
+				    struct wireless_dev *wdev)
+{
+	_adapter *padapter = wiphy_to_adapter(wiphy);
+
+	RTW_INFO("=>"FUNC_ADPT_FMT" - Abort Scan\n", FUNC_ADPT_ARG(padapter));
+	if (wdev->iftype != NL80211_IFTYPE_STATION) {
+		RTW_ERR("abort scan ignored, iftype(%d)\n", wdev->iftype);
+		return;
+	}
+	rtw_scan_abort(padapter);
+}
+#endif
+
 static int cfg80211_rtw_set_wiphy_params(struct wiphy *wiphy, u32 changed)
 {
 #if 0
@@ -3756,7 +3787,8 @@ static int rtw_cfg80211_set_wpa_ie(_adapter *padapter, u8 *pie, size_t ielen)
 	int ret = 0;
 	int wpa_ielen = 0;
 	int wpa2_ielen = 0;
-	u8 *pwpa, *pwpa2;
+	int rsnx_ielen = 0;
+	u8 *pwpa, *pwpa2, *prsnx;
 	u8 null_addr[] = {0, 0, 0, 0, 0, 0};
 
 	if (pie == NULL || !ielen) {
@@ -3807,7 +3839,26 @@ static int rtw_cfg80211_set_wpa_ie(_adapter *padapter, u8 *pie, size_t ielen)
 
 			RTW_INFO("got wpa2_ie, wpa2_ielen:%u\n", wpa2_ielen);
 		}
-	}
+
+		prsnx = rtw_get_ie(buf, WLAN_EID_RSNX, &rsnx_ielen, ielen);
+		if (prsnx && (rsnx_ielen > 0)) {
+			if ((rsnx_ielen + 2) <= MAX_RSNX_IE_LEN) {
+				_rtw_memset(padapter->securitypriv.rsnx_ie, 0,
+					MAX_RSNX_IE_LEN);
+				padapter->securitypriv.rsnx_ie_len = \
+					(rsnx_ielen + 2);
+				_rtw_memcpy(padapter->securitypriv.rsnx_ie,
+					prsnx,
+				padapter->securitypriv.rsnx_ie_len);
+			} else
+				RTW_ERR("%s:no more buf to save RSNX Cap!\n",
+					__func__);
+		} else {
+			_rtw_memset(padapter->securitypriv.rsnx_ie, 0,
+					MAX_RSNX_IE_LEN);
+			padapter->securitypriv.rsnx_ie_len = 0;
+		}
+	} /* end of (pwpa2 && wpa2_ielen > 0) */
 
 	if (group_cipher == 0)
 		group_cipher = WPA_CIPHER_NONE;
@@ -4665,11 +4716,6 @@ static int cfg80211_rtw_set_pmksa(struct wiphy *wiphy,
 	if (_rtw_memcmp((u8 *)pmksa->bssid, strZeroMacAddress, ETH_ALEN) == _TRUE)
 		return -EINVAL;
 
-	if (check_fwstate(mlme, WIFI_ASOC_STATE) == _FALSE && !sae_auth) {
-		RTW_INFO(FUNC_NDEV_FMT" not set pmksa cause not in linked state\n", FUNC_NDEV_ARG(ndev));
-		return -EINVAL;
-	}
-
 	_rtw_set_pmksa(ndev, (u8 *)pmksa->bssid, (u8 *)pmksa->pmkid);
 
 	if (sae_auth &&
@@ -5301,6 +5347,13 @@ static int cfg80211_rtw_start_ap(struct wiphy *wiphy, struct net_device *ndev,
 	ret = rtw_add_beacon(adapter, settings->beacon.head, settings->beacon.head_len,
 		settings->beacon.tail, settings->beacon.tail_len);
 
+	if (settings->beacon.assocresp_ies &&
+		settings->beacon.assocresp_ies_len > 0) {
+		rtw_cfg80211_set_assocresp_ies(ndev,
+			settings->beacon.assocresp_ies,
+			settings->beacon.assocresp_ies_len);
+	}
+
 	if (settings->ssid && settings->ssid_len) {
 		WLAN_BSSID_EX *pbss_network = &adapter->mlmepriv.cur_network.network;
 		WLAN_BSSID_EX *pbss_network_ext = &adapter->mlmeextpriv.mlmext_info.network;
@@ -5325,6 +5378,37 @@ exit:
 	return ret;
 }
 
+static int rtw_cfg80211_set_assocresp_ies(struct net_device *net, const u8 *buf, int len)
+{
+	int ret = 0;
+	_adapter *padapter = (_adapter *)rtw_netdev_priv(net);
+	struct mlme_priv *pmlmepriv = &(padapter->mlmepriv);
+
+	RTW_INFO("%s, ielen=%d\n", __func__, len);
+
+	if (len <= 0)
+		goto exit;
+
+	if (pmlmepriv->assoc_rsp) {
+		u32 free_len = pmlmepriv->assoc_rsp_len;
+
+		pmlmepriv->assoc_rsp_len = 0;
+		rtw_mfree(pmlmepriv->assoc_rsp, free_len);
+		pmlmepriv->assoc_rsp = NULL;
+	}
+
+	pmlmepriv->assoc_rsp = rtw_malloc(len);
+	if (pmlmepriv->assoc_rsp == NULL) {
+		RTW_INFO("%s()-%d: rtw_malloc() ERROR!\n", __FUNCTION__, __LINE__);
+		return -EINVAL;
+	}
+	_rtw_memcpy(pmlmepriv->assoc_rsp, buf, len);
+	pmlmepriv->assoc_rsp_len = len;
+
+exit:
+	return ret;
+}
+
 static int cfg80211_rtw_change_beacon(struct wiphy *wiphy, struct net_device *ndev,
 		struct cfg80211_beacon_data *info)
 {
@@ -5332,6 +5416,19 @@ static int cfg80211_rtw_change_beacon(struct wiphy *wiphy, struct net_device *nd
 	_adapter *adapter = (_adapter *)rtw_netdev_priv(ndev);
 
 	RTW_INFO(FUNC_NDEV_FMT"\n", FUNC_NDEV_ARG(ndev));
+
+#ifdef not_yet
+	/*
+	 * @proberesp_ies: extra information element(s) to add into Probe Response
+	 *	frames or %NULL
+	 * @proberesp_ies_len: length of proberesp_ies in octets
+	 */
+	if (info->proberesp_ies_len > 0)
+		rtw_cfg80211_set_proberesp_ies(ndev, info->proberesp_ies, info->proberesp_ies_len);
+#endif /* not_yet */
+
+	if (info->assocresp_ies_len > 0)
+		rtw_cfg80211_set_assocresp_ies(ndev, info->assocresp_ies, info->assocresp_ies_len);
 
 	ret = rtw_add_beacon(adapter, info->head, info->head_len, info->tail, info->tail_len);
 
@@ -10297,6 +10394,10 @@ static struct cfg80211_ops rtw_cfg80211_ops = {
 #endif /*CONFIG_GTK_OL*/
 	.get_station = cfg80211_rtw_get_station,
 	.scan = cfg80211_rtw_scan,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 5, 0)) && \
+    defined(CONFIG_RTW_ABORT_SCAN)
+	.abort_scan = cfg80211_rtw_abort_scan,
+#endif
 	.set_wiphy_params = cfg80211_rtw_set_wiphy_params,
 	.connect = cfg80211_rtw_connect,
 	.disconnect = cfg80211_rtw_disconnect,

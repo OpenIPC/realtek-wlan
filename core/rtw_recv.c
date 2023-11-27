@@ -4772,7 +4772,7 @@ s32 pre_recv_entry(union recv_frame *precvframe, u8 *pphy_status)
 		/* UC frame */
 		iface = rtw_get_iface_by_macddr(primary_padapter , ra);
 		if (!iface) {
-			#ifdef CONFIG_RTW_CFGVENDOR_RANDOM_MAC_OUI
+			#if defined(CONFIG_RTW_CFGVENDOR_RANDOM_MAC_OUI) || defined(CONFIG_RTW_SCAN_RAND)
 			if (_rtw_memcmp(ra, adapter_pno_mac_addr(primary_padapter), ETH_ALEN))
 				goto query_phy_status;
 			#endif
@@ -4824,8 +4824,7 @@ s32 pre_recv_entry(union recv_frame *precvframe, u8 *pphy_status)
 			goto exit;
 		}
 	}
-
-#if defined CONFIG_MP_INCLUDED || defined CONFIG_WIFI_MONITOR
+#if defined(CONFIG_MP_INCLUDED) || defined(CONFIG_WIFI_MONITOR) || defined(CONFIG_RTW_CFGVENDOR_RANDOM_MAC_OUI) || defined(CONFIG_RTW_SCAN_RAND)
 query_phy_status:
 #endif
 	if (pphy_status) {

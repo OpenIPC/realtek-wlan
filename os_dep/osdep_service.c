@@ -554,8 +554,6 @@ int mstat_sniff_rule_num = sizeof(mstat_sniff_rules) / sizeof(struct mstat_sniff
 
 bool match_mstat_sniff_rules(const enum mstat_f flags, const size_t size)
 {
-    return _TRUE;
-#if 0
 	int i;
 	for (i = 0; i < mstat_sniff_rule_num; i++) {
 		if (mstat_sniff_rules[i].flags == flags
@@ -565,7 +563,6 @@ bool match_mstat_sniff_rules(const enum mstat_f flags, const size_t size)
 	}
 
 	return _FALSE;
-#endif
 }
 
 inline void *dbg_rtw_vmalloc(u32 sz, const enum mstat_f flags, const char *func, const int line)

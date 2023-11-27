@@ -12472,7 +12472,6 @@ static iw_handler rtw_private_handler[] = {
 	rtw_test,						/* 0x1D */
 };
 
-#if 1
 #if WIRELESS_EXT >= 17
 static struct iw_statistics *rtw_get_wireless_stats(struct net_device *dev)
 {
@@ -12527,7 +12526,6 @@ static struct iw_statistics *rtw_get_wireless_stats(struct net_device *dev)
 
 	return &padapter->iwstats;
 }
-#endif
 #endif
 
 #ifdef CONFIG_WIRELESS_EXT
