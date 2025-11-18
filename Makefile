@@ -1,5 +1,5 @@
 EXTRA_CFLAGS += $(USER_EXTRA_CFLAGS) -fno-pie
-EXTRA_CFLAGS += -O3
+EXTRA_CFLAGS += -O2
 EXTRA_CFLAGS += -Wno-unused-variable
 #EXTRA_CFLAGS += -Wno-unused-value
 EXTRA_CFLAGS += -Wno-unused-label
@@ -16,6 +16,13 @@ EXTRA_CFLAGS += -Wno-unknown-pragmas
 #EXTRA_CFLAGS += -Wno-unused
 EXTRA_CFLAGS += -Wno-address
 EXTRA_CFLAGS += -Wno-vla -g
+
+# Avoid emitting prefetch sequences (pld/pldw.w) that some ARM binutils reject
+# when compiling with high optimizations. These flags are applied project-wide
+# to keep Kbuild per-file overrides simple with external module builds.
+EXTRA_CFLAGS += -fno-tree-loop-distribute-patterns -fno-tree-slp-vectorize -fno-tree-vectorize -fno-builtin
+# Ensure assembler accepts unified syntax used by recent GCC (e.g. pld.w)
+EXTRA_CFLAGS += -masm-syntax-unified
 
 #EXTRA_CFLAGS += -Wno-tautological-compare
 #EXTRA_CFLAGS += -Wno-incompatible-pointer-types
@@ -44,6 +51,12 @@ endif
 EXTRA_CFLAGS += -Wno-vla
 
 EXTRA_CFLAGS += -I$(src)/include
+
+# Work around assembler incompatibility on some arm-openipc toolchains where
+# GCC emits prefetch instructions (pld/pldw with .w suffix) during heavy
+# optimization of memmove/memcpy patterns in rtw_br_ext.c. Compile this one
+# file with conservative flags to avoid generating those sequences.
+CFLAGS_core/rtw_br_ext.o := -O0 -fno-builtin -fno-tree-loop-distribute-patterns
 
 EXTRA_LDFLAGS += --strip-debug
 
@@ -76,7 +89,9 @@ CONFIG_RTW_ADAPTIVITY_MODE = normal
 CONFIG_SIGNAL_SCALE_MAPPING = n
 CONFIG_80211W = n
 CONFIG_REDUCE_TX_CPU_LOADING = n
-CONFIG_BR_EXT = y
+# Disable NAT25 bridge extension to avoid toolchain assembler issues on some
+# environments and reduce binary size; not required for standard AP/STA usage.
+CONFIG_BR_EXT = n
 CONFIG_TDLS = n
 CONFIG_WIFI_MONITOR = y
 # If you are setting up AP (e.g. by hostapd) in 802.11ac mode, you may have to choose 'y' below.

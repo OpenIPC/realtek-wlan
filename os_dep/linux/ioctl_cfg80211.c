@@ -7601,6 +7601,15 @@ static void rtw_cfg80211_preinit_wiphy(_adapter *adapter, struct wiphy *wiphy)
 	/* wiphy->flags |= WIPHY_FLAG_OFFCHAN_TX | WIPHY_FLAG_HAVE_AP_SME; */
 #endif
 
+/* Advertise channel switch support so hostapd_cli chan_switch works */
+#if (CFG80211_API_LEVEL >= KERNEL_VERSION(3, 12, 0))
+	wiphy->flags |= WIPHY_FLAG_HAS_CHANNEL_SWITCH;
+#endif
+#if (CFG80211_API_LEVEL >= KERNEL_VERSION(3, 16, 0))
+	/* Allow multiple CSA counters in beacon/probe resp */
+	wiphy->max_num_csa_counters = 2;
+#endif
+
 #if defined(CONFIG_PM) && (CFG80211_API_LEVEL >= KERNEL_VERSION(3, 0, 0) && \
 			   CFG80211_API_LEVEL < KERNEL_VERSION(4, 12, 0))
 	wiphy->flags |= WIPHY_FLAG_SUPPORTS_SCHED_SCAN;
@@ -7809,11 +7818,80 @@ int rtw_hostapd_acs_dump_survey(struct wiphy *wiphy, struct net_device *netdev, 
 }
 #endif /* defined(CONFIG_RTW_HOSTAPD_ACS) && (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 33)) */
 
+/* Minimal AP channel switch support for nl80211 chan_switch
+ * Accepts cfg80211_csa_settings, translates chandef to driver ch/bw/offset,
+ * performs immediate switch via rtw_set_chbw_cmd, and notifies cfg80211. 
+ * Note: This implementation does not implement CSA countdown beacons.
+ */
+#if defined(CONFIG_AP_MODE) && (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 12, 0))
+static int cfg80211_rtw_channel_switch(struct wiphy *wiphy,
+                    struct net_device *dev,
+                    struct cfg80211_csa_settings *params)
+{
+    _adapter *padapter = (_adapter *)rtw_netdev_priv(dev);
+    u8 ch = 0, bw = CHANNEL_WIDTH_20, offset = HAL_PRIME_CHNL_OFFSET_DONT_CARE, ht = 0;
+    struct cfg80211_chan_def chdef;
+
+    if (!params || !params->chandef.chan)
+        return -EINVAL;
+
+    RTW_INFO("cfg80211 channel_switch request: chan_hw=%d freq=%d cf1=%d cf2=%d width=%d count=%u block_tx=%u\n",
+        params->chandef.chan ? params->chandef.chan->hw_value : -1,
+        params->chandef.chan ? params->chandef.chan->center_freq : -1,
+        params->chandef.center_freq1,
+        params->chandef.center_freq2,
+        params->chandef.width,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 12, 0))
+        params->count,
+        params->block_tx
+#else
+        0, 0
+#endif
+    );
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0))
+    rtw_get_chbw_from_cfg80211_chan_def(&params->chandef, &ht, &ch, &bw, &offset);
+#else
+    /* Fallback: treat as 20 MHz */
+    ch = (u8)ieee80211_frequency_to_channel(params->chandef.chan->center_freq);
+    bw = CHANNEL_WIDTH_20;
+    offset = HAL_PRIME_CHNL_OFFSET_DONT_CARE;
+    ht = 1;
+#endif
+
+    if (!ch)
+        return -EINVAL;
+
+    RTW_INFO("cfg80211 channel_switch: ch:%u bw:%u offset:%u ht:%u\n", ch, bw, offset, ht);
+
+    /* Notify start of channel switch so hostapd sees CSA proceed */
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 8, 0))
+    _rtw_memset(&chdef, 0, sizeof(chdef));
+    if (rtw_chbw_to_cfg80211_chan_def(wiphy, &chdef, ch, bw, offset, ht) == _SUCCESS) {
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0))
+        cfg80211_ch_switch_started_notify(padapter->pnetdev, &chdef, 0, false);
+#else
+        cfg80211_ch_switch_started_notify(padapter->pnetdev, &chdef, 0);
+#endif
+    }
+#endif
+
+    /* Prefer changing AP BSS parameters so beacon content updates too */
+    rtw_change_bss_chbw_cmd(padapter, RTW_CMDF_WAIT_ACK, ch, bw, offset);
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 5, 0))
+    rtw_cfg80211_ch_switch_notify(padapter, ch, bw, offset, ht);
+#endif
+
+    return 0;
+}
+#endif /* CONFIG_AP_MODE && kernel >= 3.12 */
+
 static struct cfg80211_ops rtw_cfg80211_ops = {
-	.change_virtual_intf = cfg80211_rtw_change_iface,
-	.add_key = cfg80211_rtw_add_key,
-	.get_key = cfg80211_rtw_get_key,
-	.del_key = cfg80211_rtw_del_key,
+    .change_virtual_intf = cfg80211_rtw_change_iface,
+    .add_key = cfg80211_rtw_add_key,
+    .get_key = cfg80211_rtw_get_key,
+    .del_key = cfg80211_rtw_del_key,
 	.set_default_key = cfg80211_rtw_set_default_key,
 #if defined(CONFIG_GTK_OL) && (CFG80211_API_LEVEL >= KERNEL_VERSION(3, 1, 0))
 	.set_rekey_data = cfg80211_rtw_set_rekey_data,
@@ -7903,13 +7981,18 @@ static struct cfg80211_ops rtw_cfg80211_ops = {
 	.suspend = cfg80211_rtw_suspend,
 	.resume = cfg80211_rtw_resume,
 #endif /* CONFIG_PNO_SUPPORT */
-	.get_channel = cfg80211_rtw_get_channel,
+    .get_channel = cfg80211_rtw_get_channel,
 #ifdef CONFIG_RFKILL_POLL
-	.rfkill_poll = cfg80211_rtw_rfkill_poll,
+    .rfkill_poll = cfg80211_rtw_rfkill_poll,
 #endif
 #if defined(CONFIG_RTW_HOSTAPD_ACS) && (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 33))
-	.dump_survey = rtw_hostapd_acs_dump_survey,
+    .dump_survey = rtw_hostapd_acs_dump_survey,
 #endif
+#ifdef CONFIG_AP_MODE
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(3, 12, 0))
+    .channel_switch = cfg80211_rtw_channel_switch,
+#endif
+#endif /* CONFIG_AP_MODE */
 };
 
 struct wiphy *rtw_wiphy_alloc(_adapter *padapter, struct device *dev)

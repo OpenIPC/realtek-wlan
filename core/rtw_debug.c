@@ -2467,21 +2467,29 @@ ssize_t proc_set_hw_status(struct file *file, const char __user *buffer, size_t 
 
 int proc_get_trx_info_debug(struct seq_file *m, void *v)
 {
-	struct net_device *dev = m->private;
-	_adapter *padapter = (_adapter *)rtw_netdev_priv(dev);
-	HAL_DATA_TYPE	*pHalData = GET_HAL_DATA(padapter);
+    struct net_device *dev = m->private;
+    _adapter *padapter = (_adapter *)rtw_netdev_priv(dev);
+    HAL_DATA_TYPE	*pHalData = GET_HAL_DATA(padapter);
+#ifdef DBG_RX_SIGNAL_DISPLAY_RAW_DATA
+    /* ensure per-packet PHY info capture is on for raw RSSI printing */
+    if (!padapter->recvpriv.store_law_data_flag)
+        padapter->recvpriv.store_law_data_flag = 1;
+#endif
 
-	int i;
-
-
-	/*============  tx info ============	*/
-	rtw_hal_get_def_var(padapter, HW_DEF_RA_INFO_DUMP, m);
-
-	/*============  rx info ============	*/
-	rtw_hal_set_odm_var(padapter, HAL_ODM_RX_INFO_DUMP, m, _FALSE);
+    int i;
 
 
-	return 0;
+    /*============  tx info ============	*/
+    rtw_hal_get_def_var(padapter, HW_DEF_RA_INFO_DUMP, m);
+
+    /*============  rx info ============	*/
+    rtw_hal_set_odm_var(padapter, HAL_ODM_RX_INFO_DUMP, m, _FALSE);
+#ifdef DBG_RX_SIGNAL_DISPLAY_RAW_DATA
+    /* rely on HAL_ODM_RX_INFO_DUMP to produce rx_rate + rssi_a/b and RAW block */
+#endif
+
+    
+    return 0;
 }
 
 int proc_get_rx_signal(struct seq_file *m, void *v)

@@ -656,12 +656,35 @@ void SetHalODMVar(
 			rtw_phydm_get_phy_cnt(Adapter, FA_TOTAL));
 
 		if (podmpriv->is_linked) {
-			_RTW_PRINT_SEL(sel, "rx_rate = %s", HDATA_RATE(podmpriv->rx_rate));
-			if (IS_HARDWARE_TYPE_8814A(Adapter))
-				_RTW_PRINT_SEL(sel, " RSSI_A = %d(%%), RSSI_B = %d(%%), RSSI_C = %d(%%), RSSI_D = %d(%%)\n",
-					podmpriv->RSSI_A, podmpriv->RSSI_B, podmpriv->RSSI_C, podmpriv->RSSI_D);
-			else
-				_RTW_PRINT_SEL(sel, " RSSI_A = %d(%%), RSSI_B = %d(%%)\n", podmpriv->RSSI_A, podmpriv->RSSI_B);
+			/* Print rx_rate on its own line; prefer last RAW sample if available */
+			{
+				/* Use RAW per-packet data rate only (do not fall back to ODM) */
+				const char *rate_str = "UNKNOWN";
+#ifdef DBG_RX_SIGNAL_DISPLAY_RAW_DATA
+				struct rx_raw_rssi *psample_pkt_rssi = &Adapter->recvpriv.raw_rssi_info;
+				if (psample_pkt_rssi->data_rate)
+					rate_str = HDATA_RATE(psample_pkt_rssi->data_rate);
+#endif
+				_RTW_PRINT_SEL(sel, "rx_rate = %s\n", rate_str);
+			}
+
+			/* Derive per-path RSSI. Fallback to raw per-packet info if ODM fields are 0. */
+			{
+				u8 rssi_a = 0, rssi_b = 0, rssi_c = 0, rssi_d = 0;
+#ifdef DBG_RX_SIGNAL_DISPLAY_RAW_DATA
+				/* Use only RAW per-packet per-path strength (no ODM fallback) */
+				struct rx_raw_rssi *psample_pkt_rssi = &Adapter->recvpriv.raw_rssi_info;
+				rssi_a = psample_pkt_rssi->mimo_signal_strength[0];
+				rssi_b = psample_pkt_rssi->mimo_signal_strength[1];
+				rssi_c = psample_pkt_rssi->mimo_signal_strength[2];
+				rssi_d = psample_pkt_rssi->mimo_signal_strength[3];
+#endif
+				if (IS_HARDWARE_TYPE_8814A(Adapter))
+					_RTW_PRINT_SEL(sel, "rssi_a = %d(%%), rssi_b = %d(%%), rssi_c = %d(%%), rssi_d = %d(%%)\n",
+						rssi_a, rssi_b, rssi_c, rssi_d);
+				else
+					_RTW_PRINT_SEL(sel, "rssi_a = %d(%%), rssi_b = %d(%%)\n", rssi_a, rssi_b);
+			}
 #ifdef DBG_RX_SIGNAL_DISPLAY_RAW_DATA
 			rtw_dump_raw_rssi_info(Adapter, sel);
 #endif

@@ -198,6 +198,14 @@
 #endif
 #define RTW_NOTCH_FILTER 0 /* 0:Disable, 1:Enable, */
 
+/*
+ * Enable raw per-packet RSSI/SNR collection and proc dump, matching 88x2eu.
+ * This feeds fast per-antenna RSSI in trx_info_debug via HAL_ODM_RX_INFO_DUMP.
+ */
+#ifndef DBG_RX_SIGNAL_DISPLAY_RAW_DATA
+#define DBG_RX_SIGNAL_DISPLAY_RAW_DATA
+#endif
+
 #define CONFIG_TX_MCAST2UNI		/*Support IP multicast->unicast*/
 /* #define CONFIG_CHECK_AC_LIFETIME 1 */	/* Check packet lifetime of 4 ACs. */
 
