@@ -18,6 +18,25 @@
 #include <linux/proc_fs.h>
 #include <linux/seq_file.h>
 
+/* proc_create_data() switched from file_operations to proc_ops in 5.6. */
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0))
+#define rtw_proc_ops proc_ops
+#define RTW_PROC_OWNER
+#define RTW_PROC_OPEN proc_open
+#define RTW_PROC_READ proc_read
+#define RTW_PROC_LSEEK proc_lseek
+#define RTW_PROC_RELEASE proc_release
+#define RTW_PROC_WRITE proc_write
+#else
+#define rtw_proc_ops file_operations
+#define RTW_PROC_OWNER .owner = THIS_MODULE,
+#define RTW_PROC_OPEN open
+#define RTW_PROC_READ read
+#define RTW_PROC_LSEEK llseek
+#define RTW_PROC_RELEASE release
+#define RTW_PROC_WRITE write
+#endif
+
 #define RTW_PROC_HDL_TYPE_SEQ	0
 #define RTW_PROC_HDL_TYPE_SSEQ	1
 
