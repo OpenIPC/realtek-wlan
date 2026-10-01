@@ -1042,7 +1042,7 @@ const char *const _regd_str[] = {
 	"WW",
 };
 
-#if CONFIG_TXPWR_LIMIT
+#ifdef CONFIG_TXPWR_LIMIT
 void _dump_regd_exc_list(void *sel, struct rf_ctl_t *rfctl)
 {
 	struct regd_exc_ent *ent;
